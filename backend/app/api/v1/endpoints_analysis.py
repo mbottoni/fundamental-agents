@@ -11,11 +11,17 @@ router = APIRouter()
 class TickerRequest(BaseModel):
     ticker: str
 
-def run_analysis_background(db: Session, orchestrator: Orchestrator, job: models.AnalysisJob):
-    # Re-create a db session for the background task
-    db_session = Session(bind=db.get_bind())
-    orchestrator.run_analysis(db=db_session, job=job)
-    db_session.close()
+def run_analysis_background(db_url: str, job_id: int, ticker: str):
+    db = next(deps.get_db())
+    try:
+        job = crud.get_analysis_job(db, job_id)
+        if not job:
+            return
+        
+        orchestrator = Orchestrator(ticker)
+        orchestrator.run_analysis(db=db, job=job)
+    finally:
+        db.close()
 
 @router.post("/", response_model=schemas.AnalysisJob)
 def run_analysis(
@@ -28,8 +34,8 @@ def run_analysis(
     Kicks off a new stock analysis job for the given ticker.
     """
     job = crud.create_analysis_job(db=db, ticker=request.ticker, user_id=current_user.id)
-    orchestrator = Orchestrator(ticker=request.ticker)
-    background_tasks.add_task(run_analysis_background, db, orchestrator, job)
+    db_url = str(db.get_bind().url)
+    background_tasks.add_task(run_analysis_background, db_url, job.id, request.ticker)
     return job
 
 @router.get("/{job_id}", response_model=schemas.AnalysisJob)

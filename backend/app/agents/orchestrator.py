@@ -36,10 +36,10 @@ class Orchestrator:
             )
             
             # Step 4: Save report to DB
-            report = crud.create_report(db, content=final_report_content, job_id=job.id)
+            crud.create_report(db, content=final_report_content, job_id=job.id)
             
             # Step 5: Update job status to complete
-            crud.update_job_status(db, job_id=job.id, status="complete", report_id=report.id)
+            crud.update_job_status(db, job_id=job.id, status="complete")
 
         except Exception as e:
             # Update job status to failed

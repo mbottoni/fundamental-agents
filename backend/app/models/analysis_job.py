@@ -9,7 +9,6 @@ class AnalysisJob(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     ticker = Column(String, index=True)
     status = Column(String, default="pending")
-    report_id = Column(Integer, ForeignKey("reports.id"), nullable=True)
 
     owner = relationship("User", back_populates="analysis_jobs")
-    report = relationship("Report")
+    report = relationship("Report", back_populates="job", uselist=False)

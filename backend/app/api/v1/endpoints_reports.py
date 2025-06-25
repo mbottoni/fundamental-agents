@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app import crud, schemas
+from app import crud, schemas, models
 from app.api import deps
 
 router = APIRouter()
@@ -16,8 +16,7 @@ def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
-    job = crud.get_job_by_report_id(db, report_id=report.id)
-    if not job or job.user_id != current_user.id:
+    if not report.job or report.job.user_id != current_user.id:
          raise HTTPException(status_code=403, detail="Not authorized to access this report")
 
     return report 

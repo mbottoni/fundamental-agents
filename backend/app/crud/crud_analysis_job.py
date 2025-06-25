@@ -13,9 +13,6 @@ def create_analysis_job(db: Session, job: AnalysisJobCreate, user_id: int):
 def get_analysis_job(db: Session, job_id: int):
     return db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
 
-def get_job_by_report_id(db: Session, report_id: int):
-    return db.query(AnalysisJob).filter(AnalysisJob.report_id == report_id).first()
-
 def get_user_jobs(db: Session, user_id: int):
     return db.query(AnalysisJob).filter(AnalysisJob.user_id == user_id).all()
 
@@ -23,8 +20,6 @@ def update_job_status(db: Session, job_id: int, status: str, report_id: Optional
     db_job = get_analysis_job(db, job_id)
     if db_job:
         db_job.status = status
-        if report_id:
-            db_job.report_id = report_id
         db.commit()
         db.refresh(db_job)
     return db_job 

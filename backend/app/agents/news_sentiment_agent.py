@@ -5,7 +5,7 @@ class NewsSentimentAgent:
     def __init__(self):
         try:
             nltk.data.find('sentiment/vader_lexicon.zip')
-        except nltk.downloader.DownloadError:
+        except LookupError:
             nltk.download('vader_lexicon')
         self.sia = SentimentIntensityAnalyzer()
 
