@@ -16,7 +16,7 @@ def get_analysis_job(db: Session, job_id: int):
 def get_user_jobs(db: Session, user_id: int):
     return db.query(AnalysisJob).filter(AnalysisJob.user_id == user_id).all()
 
-def update_job_status(db: Session, job_id: int, status: str, report_id: Optional[int] = None):
+def update_job_status(db: Session, job_id: int, status: str):
     db_job = get_analysis_job(db, job_id)
     if db_job:
         db_job.status = status

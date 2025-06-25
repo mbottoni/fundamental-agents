@@ -52,7 +52,11 @@ const DashboardPage = () => {
           if (statusResponse.data.status === 'complete') {
             clearInterval(interval);
             setLoading(false);
-            router.push(`/report/${statusResponse.data.report_id}`);
+            if (statusResponse.data.report_id) {
+              router.push(`/report/${statusResponse.data.report_id}`);
+            } else {
+              setError('Analysis complete, but report is not available.');
+            }
           } else if (statusResponse.data.status === 'failed') {
             clearInterval(interval);
             setLoading(false);

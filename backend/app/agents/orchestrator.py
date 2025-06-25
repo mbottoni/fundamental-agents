@@ -35,8 +35,9 @@ class Orchestrator:
                 valuation=valuation
             )
             
-            # Step 4: Save report to DB
-            crud.create_report(db, content=final_report_content, job_id=job.id)
+            # Step 4: Save report and link it to the job
+            report = crud.create_report(db, content=final_report_content, job_id=job.id)
+            job.report = report # Explicitly link the report to the job session
             
             # Step 5: Update job status to complete
             crud.update_job_status(db, job_id=job.id, status="complete")

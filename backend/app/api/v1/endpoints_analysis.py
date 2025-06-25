@@ -33,7 +33,8 @@ def run_analysis(
     """
     Kicks off a new stock analysis job for the given ticker.
     """
-    job = crud.create_analysis_job(db=db, ticker=request.ticker, user_id=current_user.id)
+    job_create = schemas.AnalysisJobCreate(ticker=request.ticker)
+    job = crud.create_analysis_job(db=db, job=job_create, user_id=current_user.id)
     db_url = str(db.get_bind().url)
     background_tasks.add_task(run_analysis_background, db_url, job.id, request.ticker)
     return job
