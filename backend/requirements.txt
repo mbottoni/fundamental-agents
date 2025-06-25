@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic[email]
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+psycopg2-binary
+langchain
+pandas
+requests
+beautifulsoup4
+nltk
+python-dotenv
+stripe
