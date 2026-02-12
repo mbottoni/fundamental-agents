@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
-from ..db.base_class import Base
+from ..db.base_class import Base, TableNameMixin, TimestampMixin
 
 
-class User(Base):
+class User(Base, TableNameMixin, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)

@@ -1,10 +1,12 @@
+from typing import Optional
+
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 
-from ..db.base_class import Base
+from ..db.base_class import Base, TimestampMixin
 
 
-class AnalysisJob(Base):
+class AnalysisJob(Base, TimestampMixin):
     __tablename__ = "analysisjobs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -21,7 +23,7 @@ class AnalysisJob(Base):
     )
 
     @property
-    def report_id(self) -> int | None:
+    def report_id(self) -> Optional[int]:
         """Return the linked report's ID, if any."""
         return self.report.id if self.report else None
 

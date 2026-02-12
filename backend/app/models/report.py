@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, Text, ForeignKey
 from sqlalchemy.orm import relationship
 
-from ..db.base_class import Base
+from ..db.base_class import Base, TableNameMixin, TimestampMixin
 
 
-class Report(Base):
+class Report(Base, TableNameMixin, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
     job_id = Column(Integer, ForeignKey("analysisjobs.id"), unique=True, nullable=False)
