@@ -46,6 +46,47 @@ export interface Report {
   created_at: string;
 }
 
+// --- Watchlist ---
+export interface WatchlistItem {
+  id: number;
+  user_id: number;
+  ticker: string;
+  notes: string | null;
+  created_at: string;
+}
+
+// --- Dashboard ---
+export interface DashboardStats {
+  total_analyses: number;
+  completed_analyses: number;
+  failed_analyses: number;
+  pending_analyses: number;
+  tickers_analyzed: string[];
+  watchlist_count: number;
+  subscription_status: string;
+  is_premium: boolean;
+}
+
+export interface StockQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changesPercentage: number;
+  volume: number;
+  marketCap: number;
+  dayHigh: number;
+  dayLow: number;
+  previousClose: number;
+}
+
+export interface SearchResult {
+  symbol: string;
+  name: string;
+  currency: string;
+  stockExchange: string;
+}
+
 // --- API Errors ---
 export interface ApiError {
   detail: string;
