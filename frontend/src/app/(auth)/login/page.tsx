@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
@@ -39,17 +40,52 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h2 className="text-3xl font-bold text-center mb-6">Login</h2>
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* Background */}
+      <div className="absolute inset-0">
+        <Image
+          src="/mountain.jpg"
+          alt=""
+          fill
+          className="object-cover"
+          priority
+          quality={75}
+        />
+        <div className="absolute inset-0 bg-gray-950/60 backdrop-blur-sm" />
+      </div>
+
+      {/* Back to home */}
+      <Link
+        href="/"
+        className="absolute top-6 left-6 z-20 text-white/60 hover:text-white transition flex items-center gap-1.5 text-sm"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Home
+      </Link>
+
+      {/* Card */}
+      <div className="relative z-10 glass-card-strong p-8 sm:p-10 w-full max-w-md mx-4 shadow-2xl">
+        <div className="text-center mb-8">
+          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mx-auto mb-4 border border-white/10">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold">Welcome back</h2>
+          <p className="text-gray-400 text-sm mt-1">Sign in to your account</p>
+        </div>
+
         {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg mb-4 text-center text-sm">
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl mb-5 text-center text-sm">
             {error}
           </div>
         )}
-        <form onSubmit={handleSubmit}>
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-400 mb-2 text-sm">
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-gray-400 mb-1.5 text-sm font-medium">
               Email
             </label>
             <input
@@ -57,14 +93,14 @@ export default function LoginPage() {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition"
+              className="input-field"
               placeholder="you@example.com"
               required
               disabled={isSubmitting}
             />
           </div>
-          <div className="mb-6">
-            <label htmlFor="password" className="block text-gray-400 mb-2 text-sm">
+          <div>
+            <label htmlFor="password" className="block text-gray-400 mb-1.5 text-sm font-medium">
               Password
             </label>
             <input
@@ -72,22 +108,23 @@ export default function LoginPage() {
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition"
+              className="input-field"
               required
               disabled={isSubmitting}
             />
           </div>
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+            className="w-full btn-primary text-center mt-2"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Logging in...' : 'Log In'}
+            {isSubmitting ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-        <p className="text-center text-gray-400 mt-6 text-sm">
+
+        <p className="text-center text-gray-500 mt-6 text-sm">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-blue-400 hover:underline">
+          <Link href="/register" className="text-white hover:underline font-medium">
             Sign up
           </Link>
         </p>
