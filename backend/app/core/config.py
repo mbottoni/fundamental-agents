@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     LOG_LEVEL: str = "INFO"
 
+    # Comma-separated list of emails that always get premium features.
+    PREMIUM_EMAILS: str = "maruanbakriottoni@gmail.com"
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_strong(cls, v: str) -> str:
