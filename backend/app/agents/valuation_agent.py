@@ -32,7 +32,8 @@ class ValuationAgent:
             financials = raw_data.get("financials") or {}
 
             beta = profile.get("beta")
-            market_cap = profile.get("mktCap")
+            # FMP /stable API renamed mktCap → marketCap
+            market_cap = profile.get("marketCap") or profile.get("mktCap")
 
             balance_sheet = (financials.get("balance_sheet") or [{}])[0]
             income_statement = (financials.get("income_statement") or [{}])[0]
@@ -154,7 +155,13 @@ class ValuationAgent:
         # Intrinsic value
         intrinsic_value = dcf_sum + discounted_terminal_value
 
+        # FMP /stable API removed sharesOutstanding from profile;
+        # fall back to weightedAverageShsOut from the latest income statement.
         shares_outstanding = (raw_data.get("profile") or {}).get("sharesOutstanding")
+        if not shares_outstanding:
+            income_stmts = raw_data.get("financials", {}).get("income_statement", [])
+            if income_stmts:
+                shares_outstanding = income_stmts[0].get("weightedAverageShsOut")
         if not shares_outstanding:
             return {"dcf_intrinsic_value_per_share": None, "error": "Shares outstanding not available."}
 
