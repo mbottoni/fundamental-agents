@@ -27,7 +27,11 @@ Number = Union[int, float]
 class SynthesisReportingAgent:
     """Synthesizes all analysis results into a formatted markdown report."""
 
-    # ── formatting helpers ─────────────────────────────────────
+    # ── recommendation thresholds (DCF upside/downside) ────────
+    STRONG_BUY_THRESHOLD = 0.25   # >25% undervalued
+    BUY_THRESHOLD = 0.10          # >10% undervalued
+    SELL_THRESHOLD = -0.10        # >10% overvalued
+    STRONG_SELL_THRESHOLD = -0.25 # >25% overvalued
 
     # ── formatters ────────────────────────────────────────────
 
