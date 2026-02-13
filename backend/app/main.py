@@ -141,15 +141,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routers ───────────────────────────────────────────────────
-
-app.include_router(endpoints_auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(endpoints_analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
-app.include_router(endpoints_reports.router, prefix="/api/v1/reports", tags=["Reports"])
-app.include_router(endpoints_stripe.router, prefix="/api/v1/stripe", tags=["Stripe"])
-app.include_router(endpoints_dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
-app.include_router(endpoints_watchlist.router, prefix="/api/v1/watchlist", tags=["Watchlist"])
-
+# --- Routers ---
+app.include_router(
+    endpoints_auth.router,
+    prefix="/api/v1/auth",
+    tags=["Authentication"],
+)
+app.include_router(
+    endpoints_analysis.router,
+    prefix="/api/v1/analysis",
+    tags=["Analysis"],
+)
+app.include_router(
+    endpoints_reports.router,
+    prefix="/api/v1/reports",
+    tags=["Reports"],
+)
+app.include_router(
+    endpoints_stripe.router,
+    prefix="/api/v1/stripe",
+    tags=["Stripe"],
+)
+app.include_router(
+    endpoints_watchlist.router,
+    prefix="/api/v1/watchlist",
+    tags=["Watchlist"],
+)
+app.include_router(
+    endpoints_dashboard.router,
+    prefix="/api/v1/dashboard",
+    tags=["Dashboard"],
+)
 
 # ── Root & Health ─────────────────────────────────────────────
 
