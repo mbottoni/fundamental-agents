@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import endpoints_analysis, endpoints_auth, endpoints_reports, endpoints_stripe
+from .api.v1 import endpoints_analysis, endpoints_auth, endpoints_dashboard, endpoints_reports, endpoints_stripe, endpoints_watchlist
 from .core.config import logger, settings
 from .core.db import engine
 from .db.base import Base
@@ -15,6 +15,17 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Stock Analyzer AI...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified.")
+
+    # Auto-migrate: add chart_data column if it doesn't exist yet
+    from sqlalchemy import text, inspect as sa_inspect
+    with engine.connect() as conn:
+        inspector = sa_inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("reports")]
+        if "chart_data" not in columns:
+            conn.execute(text("ALTER TABLE reports ADD COLUMN chart_data TEXT"))
+            conn.commit()
+            logger.info("Migration: added chart_data column to reports table.")
+
     yield
     logger.info("Shutting down Stock Analyzer AI...")
     engine.dispose()
@@ -65,6 +76,16 @@ app.include_router(
     endpoints_stripe.router,
     prefix="/api/v1/stripe",
     tags=["Stripe"],
+)
+app.include_router(
+    endpoints_dashboard.router,
+    prefix="/api/v1/dashboard",
+    tags=["Dashboard"],
+)
+app.include_router(
+    endpoints_watchlist.router,
+    prefix="/api/v1/watchlist",
+    tags=["Watchlist"],
 )
 
 
