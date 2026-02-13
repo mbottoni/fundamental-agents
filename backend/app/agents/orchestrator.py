@@ -154,7 +154,49 @@ class Orchestrator:
             },
             "liquidity": metrics.get("groups", {}).get("liquidity", {}),
             "leverage": metrics.get("groups", {}).get("leverage", {}),
+            "revenue_segments": self._build_revenue_segments(raw_data),
+            "dividend_history": self._build_dividend_history(raw_data),
         }
+
+    @staticmethod
+    def _build_revenue_segments(raw_data: dict) -> dict:
+        """Extract revenue segment data for pie/bar charts."""
+        segments = raw_data.get("revenue_segments", {})
+        result: dict[str, Any] = {"product": [], "geographic": []}
+
+        # Product segments - FMP returns list of dicts per year
+        product_data = segments.get("product", [])
+        if product_data and isinstance(product_data, list) and len(product_data) > 0:
+            latest = product_data[0] if isinstance(product_data[0], dict) else {}
+            for k, v in latest.items():
+                if k not in ("date", "symbol") and v is not None:
+                    try:
+                        result["product"].append({"name": k, "value": float(v)})
+                    except (TypeError, ValueError):
+                        pass
+
+        # Geographic segments
+        geo_data = segments.get("geographic", [])
+        if geo_data and isinstance(geo_data, list) and len(geo_data) > 0:
+            latest = geo_data[0] if isinstance(geo_data[0], dict) else {}
+            for k, v in latest.items():
+                if k not in ("date", "symbol") and v is not None:
+                    try:
+                        result["geographic"].append({"name": k, "value": float(v)})
+                    except (TypeError, ValueError):
+                        pass
+
+        return result
+
+    @staticmethod
+    def _build_dividend_history(raw_data: dict) -> list[dict]:
+        """Extract dividend history for charts."""
+        divs = raw_data.get("dividend_history", [])
+        return [
+            {"date": d.get("date", ""), "dividend": d.get("dividend", 0)}
+            for d in divs
+            if d.get("date") and d.get("dividend")
+        ]
 
     def run_analysis(self, db: Session, job: models.AnalysisJob) -> None:
         """Execute the full analysis pipeline and persist results."""

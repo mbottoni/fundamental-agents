@@ -545,6 +545,116 @@ export default function ReportPage() {
               </ReactMarkdown>
             </article>
 
+            {/* ── Data Visualizations ────────────────────── */}
+            {report.chart_data && (() => {
+              const cd: ChartData = typeof report.chart_data === 'string'
+                ? JSON.parse(report.chart_data)
+                : report.chart_data;
+
+              return (
+                <div className="space-y-6 mt-8">
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                    Data Visualizations
+                  </h2>
+
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Stat label="Current Price" value={fmtCurrency(cd.current_price)} />
+                    <Stat label="RSI" value={fmtNum(cd.rsi)} color={cd.rsi && cd.rsi > 70 ? 'text-red-400' : cd.rsi && cd.rsi < 30 ? 'text-emerald-400' : 'text-blue-400'} />
+                    <Stat label="Beta" value={fmtNum(cd.risk?.beta)} />
+                    <Stat label="Risk Rating" value={cd.risk?.rating || 'N/A'} color={cd.risk?.rating === 'low' ? 'text-emerald-400' : cd.risk?.rating === 'high' ? 'text-red-400' : 'text-amber-400'} />
+                  </div>
+
+                  {/* Price Chart */}
+                  <ChartSection title="Price History" subtitle="Historical closing prices with moving averages" id="viz-price">
+                    <PriceChart data={cd.price_series} ma={cd.moving_averages} />
+                  </ChartSection>
+
+                  {/* Technical */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <ChartSection title="RSI (14)" id="viz-rsi">
+                      <RSIGauge value={cd.rsi} />
+                    </ChartSection>
+
+                    <ChartSection title="Trend Signals" id="viz-signals">
+                      <TrendSignals signals={cd.trend_signals || []} />
+                    </ChartSection>
+                  </div>
+
+                  {/* DCF */}
+                  <ChartSection title="DCF Valuation" subtitle="Discounted cash flow intrinsic value vs current price" id="viz-dcf">
+                    <DCFComparison dcf={cd.dcf} />
+                  </ChartSection>
+
+                  {/* Profitability & Valuation */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <ChartSection title="Profitability" id="viz-profitability">
+                      <MetricBars data={cd.profitability} color={COLORS.emerald} formatter={fmtPct} />
+                    </ChartSection>
+                    <ChartSection title="Valuation Multiples" id="viz-valuation">
+                      <MetricBars data={cd.valuation_multiples} color={COLORS.blue} formatter={fmtNum} />
+                    </ChartSection>
+                  </div>
+
+                  {/* Growth */}
+                  <ChartSection title="Growth Metrics" id="viz-growth">
+                    <MetricBars data={cd.growth} color={COLORS.cyan} formatter={fmtPct} />
+                  </ChartSection>
+
+                  {/* Sentiment */}
+                  <ChartSection title="News Sentiment" subtitle="Based on recent news articles" id="viz-sentiment">
+                    <SentimentDonut data={cd.sentiment} score={cd.sentiment_score} />
+                  </ChartSection>
+
+                  {/* Risk */}
+                  <ChartSection title="Risk Metrics" id="viz-risk">
+                    <div className="flex flex-wrap gap-6 items-start">
+                      <RiskBadge rating={cd.risk?.rating || 'unknown'} />
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 flex-1">
+                        <Stat label="Annual Volatility" value={fmtPct(cd.risk?.annual_volatility)} />
+                        <Stat label="Sharpe Ratio" value={fmtNum(cd.risk?.sharpe_ratio)} />
+                        <Stat label="Sortino Ratio" value={fmtNum(cd.risk?.sortino_ratio)} />
+                        <Stat label="Max Drawdown" value={fmtPct(cd.risk?.max_drawdown_pct)} color="text-red-400" />
+                        <Stat label="VaR (95%)" value={fmtPct(cd.risk?.var_95)} />
+                        <Stat label="Beta" value={fmtNum(cd.risk?.beta)} />
+                      </div>
+                    </div>
+                  </ChartSection>
+
+                  {/* Revenue Segments */}
+                  {cd.revenue_segments && (cd.revenue_segments.product?.length > 0 || cd.revenue_segments.geographic?.length > 0) && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {cd.revenue_segments.product?.length > 0 && (
+                        <ChartSection title="Revenue by Product" id="viz-rev-product">
+                          <RevenueDonut data={cd.revenue_segments.product} />
+                        </ChartSection>
+                      )}
+                      {cd.revenue_segments.geographic?.length > 0 && (
+                        <ChartSection title="Revenue by Geography" id="viz-rev-geo">
+                          <RevenueDonut data={cd.revenue_segments.geographic} />
+                        </ChartSection>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Dividend History */}
+                  {cd.dividend_history && cd.dividend_history.length > 0 && (
+                    <ChartSection title="Dividend History" subtitle="Historical dividend payments per share" id="viz-dividends">
+                      <DividendChart data={cd.dividend_history} />
+                    </ChartSection>
+                  )}
+
+                  {/* Support / Resistance */}
+                  {(cd.support_resistance?.support || cd.support_resistance?.resistance) && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <Stat label="Support Level" value={fmtCurrency(cd.support_resistance.support)} color="text-emerald-400" />
+                      <Stat label="Resistance Level" value={fmtCurrency(cd.support_resistance.resistance)} color="text-red-400" />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Footer actions */}
             <div className="flex justify-between items-center mt-6 print:hidden">
               <Link
@@ -564,5 +674,94 @@ export default function ReportPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Revenue Segments Donut
+   ═══════════════════════════════════════════════════════════════ */
+
+const SEGMENT_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#22d3ee', '#fb923c', '#e879f9'];
+
+function RevenueDonut({ data }: { data: { name: string; value: number }[] }) {
+  if (!data.length) return <p className="text-gray-500 text-sm">No data available.</p>;
+
+  const total = data.reduce((s, d) => s + d.value, 0);
+
+  return (
+    <div className="flex items-center gap-6">
+      <ResponsiveContainer width={180} height={180}>
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={45}
+            outerRadius={75}
+            paddingAngle={2}
+            dataKey="value"
+            stroke="none"
+          >
+            {data.map((_, i) => (
+              <Cell key={i} fill={SEGMENT_COLORS[i % SEGMENT_COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const entry = payload[0].payload;
+              const pct = total > 0 ? ((entry.value / total) * 100).toFixed(1) : '0';
+              return (
+                <div className="bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
+                  <p className="text-sm font-medium text-white">{entry.name}</p>
+                  <p className="text-xs text-gray-400">${(entry.value / 1e9).toFixed(2)}B ({pct}%)</p>
+                </div>
+              );
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="space-y-1.5 flex-1 min-w-0">
+        {data.map((d, i) => {
+          const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0';
+          return (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: SEGMENT_COLORS[i % SEGMENT_COLORS.length] }} />
+              <span className="text-gray-300 truncate">{d.name}</span>
+              <span className="text-gray-500 ml-auto">{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Dividend History Chart
+   ═══════════════════════════════════════════════════════════════ */
+
+function DividendChart({ data }: { data: { date: string; dividend: number }[] }) {
+  if (!data.length) return <p className="text-gray-500 text-sm">No dividend data.</p>;
+
+  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+
+  return (
+    <ResponsiveContainer width="100%" height={250}>
+      <BarChart data={sorted} margin={CHART_MARGINS}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+        <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
+          tickFormatter={(d) => { const parts = d.split('-'); return `${parts[0].slice(2)}Q${Math.ceil(parseInt(parts[1]) / 3)}`; }}
+        />
+        <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
+          tickFormatter={(v) => `$${v.toFixed(2)}`}
+        />
+        <Tooltip
+          contentStyle={{ backgroundColor: '#111827', border: '1px solid #1f2937', borderRadius: '12px', fontSize: '12px' }}
+          formatter={(v: number | undefined) => [`$${(v ?? 0).toFixed(4)}`, 'Dividend'] as [string, string]}
+        />
+        <Bar dataKey="dividend" fill={COLORS.emerald} radius={[4, 4, 0, 0]} barSize={16} />
+      </BarChart>
+    </ResponsiveContainer>
   );
 }

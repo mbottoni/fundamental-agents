@@ -77,6 +77,21 @@ class DataGatheringAgent:
             logger.error("NewsAPI error for %s: %s", ticker, e)
             return []
 
+    def get_revenue_segments(self, ticker: str) -> dict[str, Any]:
+        """Fetch revenue segmentation (by product/geography) from FMP."""
+        logger.info("Fetching revenue segments for %s", ticker)
+        product = self._fmp_get("revenue-product-segmentation", {"symbol": ticker, "period": "annual"}) or []
+        geo = self._fmp_get("revenue-geographic-segmentation", {"symbol": ticker, "period": "annual"}) or []
+        return {"product": product, "geographic": geo}
+
+    def get_dividend_history(self, ticker: str) -> list[dict]:
+        """Fetch historical dividend payouts."""
+        logger.info("Fetching dividend history for %s", ticker)
+        data = self._fmp_get("historical-price-eod/dividend", {"symbol": ticker})
+        if data and isinstance(data, list):
+            return data[:20]  # last 20 dividends
+        return []
+
     def run(self, ticker: str) -> dict[str, Any]:
         """Run all data gathering tasks for a given ticker."""
         logger.info("Starting data gathering for %s", ticker)
@@ -85,13 +100,16 @@ class DataGatheringAgent:
         prices = self.get_stock_price_history(ticker)
         profile = self.get_company_profile(ticker)
         news = self.get_news(ticker)
+        revenue_segments = self.get_revenue_segments(ticker)
+        dividend_history = self.get_dividend_history(ticker)
 
         logger.info(
-            "Data gathering complete for %s: profile=%s, prices=%d, news=%d",
+            "Data gathering complete for %s: profile=%s, prices=%d, news=%d, divs=%d",
             ticker,
             "found" if profile else "missing",
             len(prices),
             len(news),
+            len(dividend_history),
         )
 
         return {
@@ -100,4 +118,6 @@ class DataGatheringAgent:
             "prices": prices,
             "profile": profile,
             "news": news,
+            "revenue_segments": revenue_segments,
+            "dividend_history": dividend_history,
         }

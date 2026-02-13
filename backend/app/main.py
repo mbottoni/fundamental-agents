@@ -18,8 +18,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .api.v1 import (
     endpoints_analysis,
     endpoints_auth,
+    endpoints_chart,
+    endpoints_compare,
     endpoints_dashboard,
+    endpoints_market,
     endpoints_reports,
+    endpoints_screener,
     endpoints_stripe,
     endpoints_watchlist,
 )
@@ -149,6 +153,10 @@ app.include_router(endpoints_reports.router, prefix="/api/v1/reports", tags=["Re
 app.include_router(endpoints_stripe.router, prefix="/api/v1/stripe", tags=["Stripe"])
 app.include_router(endpoints_dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(endpoints_watchlist.router, prefix="/api/v1/watchlist", tags=["Watchlist"])
+app.include_router(endpoints_compare.router, prefix="/api/v1/compare", tags=["Compare"])
+app.include_router(endpoints_screener.router, prefix="/api/v1/screener", tags=["Screener"])
+app.include_router(endpoints_chart.router, prefix="/api/v1/chart", tags=["Chart"])
+app.include_router(endpoints_market.router, prefix="/api/v1/market", tags=["Market"])
 
 
 # ── Root & Health ─────────────────────────────────────────────

@@ -44,6 +44,10 @@ export default function Home() {
               <span className="text-lg font-bold tracking-tight">StockAnalyzer</span>
             </Link>
             <div className="hidden md:flex items-center gap-8">
+              <Link href="/screener" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Screener</Link>
+              <Link href="/compare" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Compare</Link>
+              <Link href="/market" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Market</Link>
+              <Link href="/lists" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Lists</Link>
               <Link href="/pricing" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Pricing</Link>
               <Link href="/login" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Log In</Link>
               <Link href="/register" className="text-sm bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-lg transition font-semibold">
@@ -290,97 +294,112 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── More Features ─────────────────────────────────── */}
+      {/* ── Tools & Features ─────────────────────────────── */}
       <section className="py-24 px-6 section-light">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-16">
-            More Features
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-4">
+            Professional Tools
           </h2>
+          <p className="text-gray-500 text-lg text-center max-w-2xl mx-auto mb-16">
+            Everything you need for serious stock research, all in one platform.
+          </p>
 
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Watchlist */}
-            <div className="card-light p-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Stock Screener */}
+            <Link href="/screener" className="card-light p-7 group hover:border-brand-100 block">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold">Stock Screener</h3>
+              </div>
+              <p className="text-gray-500 text-sm leading-relaxed mb-3">
+                Filter stocks by sector, market cap, price, exchange, and more. Find your next investment in seconds.
+              </p>
+              <span className="text-brand-600 text-sm font-semibold group-hover:underline">Try Screener &rarr;</span>
+            </Link>
+
+            {/* Compare */}
+            <Link href="/compare" className="card-light p-7 group hover:border-brand-100 block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold">Stock Comparison</h3>
+              </div>
+              <p className="text-gray-500 text-sm leading-relaxed mb-3">
+                Compare two stocks side-by-side across 20+ metrics including valuation, profitability, and growth.
+              </p>
+              <span className="text-brand-600 text-sm font-semibold group-hover:underline">Compare Stocks &rarr;</span>
+            </Link>
+
+            {/* Interactive Charts */}
+            <Link href="/chart/AAPL" className="card-light p-7 group hover:border-brand-100 block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold">Interactive Charts</h3>
+              </div>
+              <p className="text-gray-500 text-sm leading-relaxed mb-3">
+                Full technical charts with SMA, EMA, RSI, MACD, Bollinger Bands. Multiple timeframes from 1M to 5Y.
+              </p>
+              <span className="text-brand-600 text-sm font-semibold group-hover:underline">View Charts &rarr;</span>
+            </Link>
+
+            {/* Market Overview */}
+            <Link href="/market" className="card-light p-7 group hover:border-brand-100 block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center group-hover:scale-105 transition-transform">
                   <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold">Market Overview</h3>
+              </div>
+              <p className="text-gray-500 text-sm leading-relaxed mb-3">
+                Top gainers, losers, most active stocks, and sector performance. Stay on top of market trends.
+              </p>
+              <span className="text-brand-600 text-sm font-semibold group-hover:underline">View Market &rarr;</span>
+            </Link>
+
+            {/* Stock Lists */}
+            <Link href="/lists" className="card-light p-7 group hover:border-brand-100 block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-pink-50 border border-pink-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <svg className="w-5 h-5 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold">Stock Lists & Themes</h3>
+              </div>
+              <p className="text-gray-500 text-sm leading-relaxed mb-3">
+                Curated collections: Magnificent 7, AI Leaders, Dividend Aristocrats, Semiconductors, and more.
+              </p>
+              <span className="text-brand-600 text-sm font-semibold group-hover:underline">Browse Lists &rarr;</span>
+            </Link>
+
+            {/* Watchlist */}
+            <Link href="/dashboard" className="card-light p-7 group hover:border-brand-100 block">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold">Watchlist</h3>
+                <h3 className="text-lg font-bold">Watchlist & History</h3>
               </div>
-              <p className="text-gray-500 mb-4">
-                Save stocks to your watchlist to observe and track them over time.
-                Get quick access to analyze any company in your list.
+              <p className="text-gray-500 text-sm leading-relaxed mb-3">
+                Save stocks, add notes, track analysis history, and access all your previous reports.
               </p>
-              <div className="space-y-2">
-                <SmallFeature text="Track favorite stocks" />
-                <SmallFeature text="Quick access to analysis" />
-                <SmallFeature text="Custom notes per stock" />
-              </div>
-            </div>
-
-            {/* Analysis History */}
-            <div className="card-light p-8">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold">Analysis History</h3>
-              </div>
-              <p className="text-gray-500 mb-4">
-                All your previous analyses are saved and accessible.
-                Compare reports over time to track how your thesis evolves.
-              </p>
-              <div className="space-y-2">
-                <SmallFeature text="Full report archive" />
-                <SmallFeature text="Compare analyses over time" />
-                <SmallFeature text="Export capabilities" />
-              </div>
-            </div>
-
-            {/* Premium Features */}
-            <div className="card-light p-8">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold">Secure & Private</h3>
-              </div>
-              <p className="text-gray-500 mb-4">
-                Your data stays private. JWT authentication, encrypted connections,
-                and security headers protect every interaction.
-              </p>
-              <div className="space-y-2">
-                <SmallFeature text="End-to-end encryption" />
-                <SmallFeature text="JWT authentication" />
-                <SmallFeature text="Security headers on every response" />
-              </div>
-            </div>
-
-            {/* Dashboard */}
-            <div className="card-light p-8">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold">Dashboard</h3>
-              </div>
-              <p className="text-gray-500 mb-4">
-                A clean command center for all your analyses. Start new ones,
-                track progress in real-time, and access reports instantly.
-              </p>
-              <div className="space-y-2">
-                <SmallFeature text="Real-time job tracking" />
-                <SmallFeature text="One-click report access" />
-                <SmallFeature text="Subscription management" />
-              </div>
-            </div>
+              <span className="text-brand-600 text-sm font-semibold group-hover:underline">Go to Dashboard &rarr;</span>
+            </Link>
           </div>
         </div>
       </section>
@@ -424,6 +443,16 @@ export default function Home() {
               </p>
             </div>
             <div className="flex gap-12">
+              <div>
+                <h4 className="font-semibold text-sm mb-3">Tools</h4>
+                <div className="flex flex-col gap-2">
+                  <Link href="/screener" className="text-sm text-gray-400 hover:text-gray-700 transition">Stock Screener</Link>
+                  <Link href="/compare" className="text-sm text-gray-400 hover:text-gray-700 transition">Stock Comparison</Link>
+                  <Link href="/chart/AAPL" className="text-sm text-gray-400 hover:text-gray-700 transition">Charts</Link>
+                  <Link href="/market" className="text-sm text-gray-400 hover:text-gray-700 transition">Market Overview</Link>
+                  <Link href="/lists" className="text-sm text-gray-400 hover:text-gray-700 transition">Stock Lists</Link>
+                </div>
+              </div>
               <div>
                 <h4 className="font-semibold text-sm mb-3">Product</h4>
                 <div className="flex flex-col gap-2">

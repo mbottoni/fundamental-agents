@@ -171,6 +171,11 @@ export interface ChartData {
   };
   liquidity: Record<string, number | null>;
   leverage: Record<string, number | null>;
+  revenue_segments?: {
+    product: { name: string; value: number }[];
+    geographic: { name: string; value: number }[];
+  };
+  dividend_history?: { date: string; dividend: number }[];
 }
 
 // --- API Errors ---
