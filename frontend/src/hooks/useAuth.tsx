@@ -17,6 +17,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     router.push('/login');
   }, [router]);
 
@@ -43,9 +44,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [fetchUser]);
 
   const login = useCallback(
-    async (newToken: string) => {
+    async (newToken: string, refreshToken?: string) => {
       setToken(newToken);
       localStorage.setItem('token', newToken);
+      if (refreshToken) {
+        localStorage.setItem('refresh_token', refreshToken);
+      }
       await fetchUser(newToken);
       router.push('/dashboard');
     },

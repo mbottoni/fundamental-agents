@@ -3,18 +3,20 @@ export interface User {
   id: number;
   email: string;
   subscription_status: string;
+  is_verified: boolean;
 }
 
 // --- Auth ---
 export interface LoginResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
 }
 
 export interface AuthContextType {
   token: string | null;
   user: User | null;
-  login: (token: string) => void;
+  login: (token: string, refreshToken?: string) => void;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;

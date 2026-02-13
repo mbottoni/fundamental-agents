@@ -30,7 +30,7 @@ export default function LoginPage() {
       });
 
       if (response.data.access_token) {
-        await login(response.data.access_token);
+        await login(response.data.access_token, response.data.refresh_token);
       }
     } catch (err) {
       setError(getErrorMessage(err, 'An error occurred during login.'));
@@ -122,7 +122,13 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-gray-500 mt-6 text-sm">
+        <div className="text-center mt-5">
+          <Link href="/forgot-password" className="text-blue-400 hover:underline text-sm">
+            Forgot your password?
+          </Link>
+        </div>
+
+        <p className="text-center text-gray-500 mt-4 text-sm">
           Don&apos;t have an account?{' '}
           <Link href="/register" className="text-white hover:underline font-medium">
             Sign up

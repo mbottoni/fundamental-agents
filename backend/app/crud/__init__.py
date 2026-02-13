@@ -1,4 +1,14 @@
-from .crud_user import get_user_by_email, get_user_by_id, create_user, update_user_subscription
+from .crud_user import (
+    get_user_by_email,
+    get_user_by_id,
+    get_user_by_stripe_customer_id,
+    create_user,
+    verify_user_email,
+    reset_user_password,
+    update_user_subscription,
+    deactivate_subscription_by_stripe_id,
+    count_user_analyses_today,
+)
 from .crud_analysis_job import create_analysis_job, get_analysis_job, update_job_status, get_user_jobs
 from .crud_report import create_report, get_report, get_report_by_job_id
 from .crud_watchlist import (

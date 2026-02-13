@@ -1,0 +1,79 @@
+version: '3.8'
+
+# ── Production Docker Compose ────────────────────────────────
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Requires a .env.prod file with all production secrets.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:8000 --timeout 120 --access-logfile -
+    env_file:
+      - .env.prod
+    environment:
+      - DATABASE_URL=postgresql://user:${DB_PASSWORD}@db:5432/stock-analyzer
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - NEXT_PUBLIC_API_URL=${API_URL:-https://api.yourdomain.com}/api/v1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=stock-analyzer
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d stock-analyzer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
