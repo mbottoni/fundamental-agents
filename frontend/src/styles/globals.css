@@ -7,11 +7,11 @@
     scroll-behavior: smooth;
   }
 
+  /* App pages (dashboard, report) keep dark theme */
   body {
-    @apply bg-gray-950 text-white antialiased;
+    @apply antialiased;
   }
 
-  /* Hide scrollbar for clean look but keep functionality */
   ::-webkit-scrollbar {
     width: 6px;
   }
@@ -19,14 +19,15 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-700 rounded-full;
+    @apply bg-gray-300 rounded-full;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-600;
+    @apply bg-gray-400;
   }
 }
 
 @layer components {
+  /* ── Dark Theme (app pages) ────────────────────────────── */
   .glass-card {
     @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl;
   }
@@ -39,21 +40,86 @@
     @apply bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent;
   }
 
-  .btn-primary {
-    @apply bg-white text-gray-900 font-semibold px-8 py-3.5 rounded-xl
-           hover:bg-gray-100 transition-all duration-300
-           shadow-lg shadow-white/10 hover:shadow-white/20;
-  }
-
-  .btn-secondary {
-    @apply border border-white/20 text-white font-medium px-8 py-3.5 rounded-xl
-           hover:bg-white/5 transition-all duration-300;
-  }
-
   .input-field {
     @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3
            focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30
            transition placeholder:text-gray-500;
+  }
+
+  /* ── Light Theme Buttons (marketing pages) ─────────────── */
+  .btn-primary {
+    @apply bg-brand-600 text-white font-semibold px-8 py-3.5 rounded-xl
+           hover:bg-brand-700 transition-all duration-300
+           shadow-lg shadow-brand-600/20 hover:shadow-brand-600/30;
+  }
+
+  .btn-secondary {
+    @apply border border-gray-200 text-gray-700 font-medium px-8 py-3.5 rounded-xl
+           hover:bg-gray-50 transition-all duration-300;
+  }
+
+  .btn-outline-white {
+    @apply border border-white/20 text-white font-medium px-8 py-3.5 rounded-xl
+           hover:bg-white/5 transition-all duration-300;
+  }
+
+  /* ── Light Cards ────────────────────────────────────────── */
+  .card-light {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm
+           hover:shadow-md transition-all duration-300;
+  }
+
+  .card-light-elevated {
+    @apply bg-white rounded-2xl border border-gray-100
+           shadow-lg shadow-gray-200/50 hover:shadow-xl transition-all duration-300;
+  }
+
+  /* ── Feature Section Alternating ────────────────────────── */
+  .section-light {
+    @apply bg-white;
+  }
+
+  .section-gray {
+    @apply bg-gray-50;
+  }
+
+  /* ── Stock Marquee ──────────────────────────────────────── */
+  .marquee-container {
+    @apply overflow-hidden relative;
+  }
+
+  .marquee-container::before,
+  .marquee-container::after {
+    content: '';
+    @apply absolute top-0 bottom-0 w-24 z-10;
+  }
+
+  .marquee-container::before {
+    @apply left-0;
+    background: linear-gradient(to right, white, transparent);
+  }
+
+  .marquee-container::after {
+    @apply right-0;
+    background: linear-gradient(to left, white, transparent);
+  }
+
+  .marquee-container-dark::before {
+    background: linear-gradient(to right, #030712, transparent);
+  }
+
+  .marquee-container-dark::after {
+    background: linear-gradient(to left, #030712, transparent);
+  }
+
+  .marquee-track {
+    @apply flex gap-4 whitespace-nowrap;
+  }
+
+  /* ── Step Badge ─────────────────────────────────────────── */
+  .step-badge {
+    @apply inline-flex items-center gap-2 text-xs font-bold tracking-widest uppercase
+           text-brand-600 bg-brand-50 border border-brand-100 px-4 py-1.5 rounded-full;
   }
 }
 
@@ -63,7 +129,7 @@
     background: white !important;
     color: black !important;
   }
-  .print\\:hidden {
+  .print\:hidden {
     display: none !important;
   }
 }
