@@ -3,7 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import endpoints_analysis, endpoints_auth, endpoints_dashboard, endpoints_reports, endpoints_stripe, endpoints_watchlist
+from .api.v1 import (
+    endpoints_analysis,
+    endpoints_auth,
+    endpoints_dashboard,
+    endpoints_reports,
+    endpoints_stripe,
+    endpoints_watchlist,
+)
 from .core.config import logger, settings
 from .core.db import engine
 from .db.base import Base
@@ -78,14 +85,14 @@ app.include_router(
     tags=["Stripe"],
 )
 app.include_router(
-    endpoints_dashboard.router,
-    prefix="/api/v1/dashboard",
-    tags=["Dashboard"],
-)
-app.include_router(
     endpoints_watchlist.router,
     prefix="/api/v1/watchlist",
     tags=["Watchlist"],
+)
+app.include_router(
+    endpoints_dashboard.router,
+    prefix="/api/v1/dashboard",
+    tags=["Dashboard"],
 )
 
 

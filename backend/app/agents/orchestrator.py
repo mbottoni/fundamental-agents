@@ -1,8 +1,15 @@
 """
 Orchestrator
 ============
-Coordinates the multi-agent analysis pipeline and persists both
-the markdown report AND structured chart data for the frontend.
+Coordinates the multi‑agent analysis pipeline:
+
+  1. Data Gathering      → raw financial data, prices, profile, news
+  2. Financial Metrics   → 30+ fundamental ratios & growth metrics
+  3. Technical Analysis  → RSI, MACD, MAs, Bollinger, volume, momentum
+  4. Risk Assessment     → volatility, Sharpe, Sortino, VaR, drawdown
+  5. News Sentiment      → VADER compound scores on recent articles
+  6. Valuation (DCF)     → intrinsic value per share
+  7. Synthesis Report    → comprehensive markdown report
 """
 
 import logging
@@ -24,9 +31,13 @@ logger = logging.getLogger("stock_analyzer.orchestrator")
 # Max price points to send to the frontend for charts
 CHART_PRICE_LIMIT = 120
 
-
 class Orchestrator:
-    """Coordinates the multi-agent analysis pipeline."""
+    """
+    Coordinates the multi‑agent analysis pipeline.
+
+    Pipeline stages update the job status in the database so the
+    frontend can display real‑time progress.
+    """
 
     def __init__(self, ticker: str) -> None:
         self.ticker = ticker.upper()
@@ -150,7 +161,7 @@ class Orchestrator:
         logger.info("Starting analysis pipeline for %s (job %d)", self.ticker, job.id)
 
         try:
-            # ── Step 1: Gather raw data
+            # ── Step 1: Gather raw data ──────────────────────
             crud.update_job_status(db, job_id=job.id, status="gathering_data")
             raw_data = self.data_agent.run(self.ticker)
 
@@ -160,7 +171,7 @@ class Orchestrator:
                     "Verify the ticker symbol is correct."
                 )
 
-            # ── Step 2: Run analysis agents
+            # ── Step 2: Run analysis agents ──────────────────
             crud.update_job_status(db, job_id=job.id, status="analyzing")
 
             metrics = self.metrics_agent.run(raw_data)
@@ -169,7 +180,7 @@ class Orchestrator:
             sentiment = self.sentiment_agent.run(raw_data.get("news", []))
             valuation = self.valuation_agent.run(raw_data)
 
-            # ── Step 3: Synthesize markdown report
+            # ── Step 3: Synthesize the report ────────────────
             crud.update_job_status(db, job_id=job.id, status="generating_report")
 
             report_content = self.synthesis_agent.run(
@@ -181,15 +192,8 @@ class Orchestrator:
                 risk=risk,
             )
 
-            # ── Step 4: Build structured chart data
-            chart_data = self._build_chart_data(
-                raw_data, metrics, technical, risk, sentiment, valuation,
-            )
-
-            # ── Step 5: Save & finalize
-            report = crud.create_report(
-                db, content=report_content, job_id=job.id, chart_data=chart_data,
-            )
+            # ── Step 4: Save & finalize ──────────────────────
+            report = crud.create_report(db, content=report_content, job_id=job.id)
             crud.update_job_status(db, job_id=job.id, status="complete")
 
             logger.info(

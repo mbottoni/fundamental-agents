@@ -1,10 +1,18 @@
 """
 Synthesis Reporting Agent
 =========================
-Combines outputs from all analysis agents into a professional
-markdown report. The report intentionally duplicates key numbers
-from the structured ``chart_data`` so the reader can understand
-the report even without the visual charts.
+Generates a comprehensive, professional‑grade markdown report that
+combines outputs from every analysis agent:
+  1. Executive Summary
+  2. Company Overview
+  3. Valuation (DCF + multiples)
+  4. Financial Health (profitability, liquidity, leverage, efficiency)
+  5. Growth Analysis
+  6. Technical Analysis (indicators + signals)
+  7. Risk Assessment
+  8. Market Sentiment
+  9. Investment Thesis & Recommendation
+  10. Disclaimer
 """
 
 import logging
@@ -17,112 +25,384 @@ Number = Union[int, float]
 
 
 class SynthesisReportingAgent:
-    """Synthesizes all agent results into a comprehensive markdown report."""
+    """Synthesizes all analysis results into a formatted markdown report."""
 
     # ── formatting helpers ─────────────────────────────────────
 
-    @staticmethod
-    def _fc(v: Any) -> str:
+    # ── formatters ────────────────────────────────────────────
+
+    def _fc(self, value: Any) -> str:
         """Format currency."""
-        if isinstance(v, (int, float)):
-            return f"${v:,.2f}"
+        if isinstance(value, (int, float)):
+            if abs(value) >= 1_000_000_000:
+                return f"${value / 1_000_000_000:,.2f}B"
+            if abs(value) >= 1_000_000:
+                return f"${value / 1_000_000:,.2f}M"
+            return f"${value:,.2f}"
         return "N/A"
 
-    @staticmethod
-    def _fr(v: Any, decimals: int = 2) -> str:
+    def _fr(self, value: Any, decimals: int = 2) -> str:
         """Format ratio."""
-        if isinstance(v, (int, float)):
-            return f"{v:.{decimals}f}"
+        if isinstance(value, (int, float)):
+            return f"{value:.{decimals}f}"
         return "N/A"
 
-    @staticmethod
-    def _fp(v: Any) -> str:
-        """Format percentage from decimal (0.25 → 25.00%)."""
-        if isinstance(v, (int, float)):
-            return f"{v * 100:.2f}%"
+    def _fp(self, value: Any) -> str:
+        """Format as percentage (input is decimal: 0.10 → 10.00%)."""
+        if isinstance(value, (int, float)):
+            return f"{value * 100:.2f}%"
         return "N/A"
 
-    @staticmethod
-    def _fp_raw(v: Any) -> str:
-        """Format value that is already a percentage."""
-        if isinstance(v, (int, float)):
-            return f"{v:.2f}%"
+    def _fp_raw(self, value: Any) -> str:
+        """Format already‑percentage value (input is 10.0 → 10.00%)."""
+        if isinstance(value, (int, float)):
+            return f"{value:.2f}%"
         return "N/A"
 
-    @staticmethod
-    def _fn(v: Any) -> str:
-        """Format large numbers with abbreviation."""
-        if not isinstance(v, (int, float)):
-            return "N/A"
-        v = float(v)
-        for unit, thresh in [("T", 1e12), ("B", 1e9), ("M", 1e6), ("K", 1e3)]:
-            if abs(v) >= thresh:
-                return f"${v / thresh:,.2f}{unit}"
-        return f"${v:,.0f}"
+    def _fn(self, value: Any) -> str:
+        """Format large number."""
+        if isinstance(value, (int, float)):
+            if abs(value) >= 1_000_000_000:
+                return f"{value / 1_000_000_000:,.2f}B"
+            if abs(value) >= 1_000_000:
+                return f"{value / 1_000_000:,.2f}M"
+            if abs(value) >= 1_000:
+                return f"{value / 1_000:,.1f}K"
+            return f"{value:,.0f}"
+        return "N/A"
 
-    # ── recommendation engine ──────────────────────────────────
+    # ── conclusion logic ──────────────────────────────────────
 
     def _generate_recommendation(
         self,
         current_price: Optional[Number],
         dcf_value: Optional[Number],
-        risk: dict,
-        technical: dict,
+        risk_rating: str,
+        rsi: Optional[float],
+        trend_signals: list[str],
     ) -> tuple[str, str, int]:
-        """Return (recommendation, rationale, confidence_score)."""
-        base_confidence = 50
-        signals: list[str] = []
+        """
+        Returns (recommendation, rationale, confidence_score 1-100).
+        """
+        # Start with valuation‑based recommendation
+        if not isinstance(current_price, (int, float)) or not isinstance(dcf_value, (int, float)):
+            return (
+                "hold",
+                "Insufficient data for a conclusive valuation‑based recommendation.",
+                30,
+            )
 
-        # DCF valuation signal
-        if isinstance(current_price, (int, float)) and isinstance(dcf_value, (int, float)) and current_price > 0:
-            diff_pct = ((dcf_value - current_price) / current_price)
-            if diff_pct > 0.20:
-                rec = "Strong Buy"
-                signals.append(f"significantly undervalued by {diff_pct:.0%}")
-                base_confidence += 20
-            elif diff_pct > 0.05:
-                rec = "Buy"
-                signals.append(f"undervalued by {diff_pct:.0%}")
-                base_confidence += 10
-            elif diff_pct < -0.20:
-                rec = "Strong Sell"
-                signals.append(f"significantly overvalued by {-diff_pct:.0%}")
-                base_confidence += 15
-            elif diff_pct < -0.05:
-                rec = "Sell"
-                signals.append(f"overvalued by {-diff_pct:.0%}")
-                base_confidence += 5
-            else:
-                rec = "Hold"
-                signals.append("fairly valued")
+        diff = (dcf_value - current_price) / current_price
+        confidence = 50
+
+        if diff > self.STRONG_BUY_THRESHOLD:
+            rec, reason = "strong buy", f"significantly undervalued by {diff:.0%}"
+            confidence = 75
+        elif diff > self.BUY_THRESHOLD:
+            rec, reason = "buy", f"undervalued by {diff:.0%}"
+            confidence = 65
+        elif diff < self.STRONG_SELL_THRESHOLD:
+            rec, reason = "strong sell", f"significantly overvalued by {-diff:.0%}"
+            confidence = 75
+        elif diff < self.SELL_THRESHOLD:
+            rec, reason = "sell", f"overvalued by {-diff:.0%}"
+            confidence = 65
         else:
-            rec = "Hold"
-            signals.append("insufficient valuation data")
+            rec, reason = "hold", "fairly valued"
+            confidence = 55
 
-        # Risk adjustment
-        risk_rating = risk.get("risk_rating", "unknown")
-        if risk_rating in ("very_high", "high"):
-            base_confidence -= 10
-            signals.append(f"{risk_rating.replace('_', ' ')} risk profile")
-        elif risk_rating == "low":
-            base_confidence += 5
+        # Adjust confidence based on risk and technicals
+        if risk_rating == "very_high":
+            confidence -= 15
+        elif risk_rating == "high":
+            confidence -= 10
 
-        # Technical signals boost
-        trend_signals = technical.get("trend_signals", [])
-        bullish = sum(1 for s in trend_signals if "bullish" in s.lower())
-        bearish = sum(1 for s in trend_signals if "bearish" in s.lower())
-        if bullish > bearish:
-            base_confidence += 5
-            signals.append(f"{bullish} bullish technical signals")
-        elif bearish > bullish:
-            base_confidence -= 5
-            signals.append(f"{bearish} bearish technical signals")
+        bullish_signals = sum(1 for s in trend_signals if "bullish" in s.lower())
+        bearish_signals = sum(1 for s in trend_signals if "bearish" in s.lower())
+        if rec in ("buy", "strong buy") and bullish_signals > bearish_signals:
+            confidence += 10
+        elif rec in ("sell", "strong sell") and bearish_signals > bullish_signals:
+            confidence += 10
+        elif rec in ("buy", "strong buy") and bearish_signals > bullish_signals:
+            confidence -= 10
 
-        confidence = max(10, min(95, base_confidence))
-        rationale = "; ".join(signals)
-        return rec, rationale, confidence
+        if rsi is not None:
+            if rsi > 70 and rec in ("buy", "strong buy"):
+                confidence -= 10  # overbought contradicts buy
+            elif rsi < 30 and rec in ("sell", "strong sell"):
+                confidence -= 10  # oversold contradicts sell
 
-    # ── report builder ─────────────────────────────────────────
+        confidence = max(10, min(confidence, 95))
+
+        return rec, reason, confidence
+
+    # ── section builders ──────────────────────────────────────
+
+    def _section_header(self, profile: dict, ticker: str, current_price: Optional[Number]) -> str:
+        company = profile.get("companyName", "Unknown Company")
+        industry = profile.get("industry", "N/A")
+        sector = profile.get("sector", "N/A")
+        exchange = profile.get("exchangeFullName", "N/A")
+        return "\n\n".join([
+            f"# Financial Analysis Report: {company} ({ticker})",
+            f"**Report Date:** {date.today().strftime('%B %d, %Y')}",
+            f"**Industry:** {industry} | **Sector:** {sector} | **Exchange:** {exchange}",
+            f"**Current Price:** {self._fc(current_price)}",
+        ])
+
+    def _section_executive_summary(
+        self, rec: str, reason: str, confidence: int, risk_rating: str,
+        current_price: Optional[Number], dcf_value: Optional[Number],
+        metrics: dict, technical: dict,
+    ) -> str:
+        lines = ["## Executive Summary", ""]
+        lines.append(
+            f"**Recommendation: {rec.upper()}** (Confidence: {confidence}%)"
+        )
+        lines.append(f"- **Valuation:** The stock appears to be {reason}.")
+        lines.append(f"- **Risk Level:** {risk_rating.replace('_', ' ').title()}")
+
+        rsi = technical.get("rsi")
+        if rsi is not None:
+            lines.append(f"- **RSI:** {self._fr(rsi)} ({'overbought' if rsi > 70 else 'oversold' if rsi < 30 else 'neutral'})")
+
+        pe = metrics.get("pe_ratio")
+        if pe is not None:
+            lines.append(f"- **P/E Ratio:** {self._fr(pe)}")
+
+        return "\n".join(lines)
+
+    def _section_valuation(self, valuation: dict, metrics: dict) -> str:
+        lines = ["## Valuation Analysis", ""]
+
+        dcf = valuation.get("dcf_intrinsic_value_per_share")
+        wacc = valuation.get("wacc")
+        lines.append("### DCF Model")
+        lines.append(f"- **Intrinsic Value (DCF):** {self._fc(dcf)}")
+        if wacc:
+            lines.append(f"- **WACC:** {self._fp(wacc)}")
+        if valuation.get("latest_fcf"):
+            lines.append(f"- **Latest Free Cash Flow:** {self._fc(valuation['latest_fcf'])}")
+        if valuation.get("error"):
+            lines.append(f"- *Note: {valuation['error']}*")
+
+        lines.append("")
+        lines.append("### Relative Valuation (Multiples)")
+
+        val_group = metrics.get("groups", {}).get("valuation", {})
+        for label, key in [
+            ("P/E Ratio", "pe_ratio"), ("P/B Ratio", "pb_ratio"),
+            ("P/S Ratio", "ps_ratio"), ("EV/EBITDA", "ev_ebitda"),
+            ("PEG Ratio", "peg_ratio"),
+        ]:
+            v = val_group.get(key) or metrics.get(key)
+            lines.append(f"- **{label}:** {self._fr(v)}")
+
+        return "\n".join(lines)
+
+    def _section_financial_health(self, metrics: dict) -> str:
+        groups = metrics.get("groups", {})
+        lines = ["## Financial Health", ""]
+
+        # Profitability
+        lines.append("### Profitability")
+        prof = groups.get("profitability", {})
+        for label, key in [
+            ("Gross Margin", "gross_margin"), ("Operating Margin", "operating_margin"),
+            ("Net Margin", "net_margin"), ("ROE", "roe"),
+            ("ROA", "roa"), ("ROIC", "roic"),
+        ]:
+            v = prof.get(key)
+            lines.append(f"- **{label}:** {self._fp(v)}")
+
+        # Liquidity
+        lines.append("")
+        lines.append("### Liquidity")
+        liq = groups.get("liquidity", {})
+        lines.append(f"- **Current Ratio:** {self._fr(liq.get('current_ratio'))}")
+        lines.append(f"- **Quick Ratio:** {self._fr(liq.get('quick_ratio'))}")
+
+        # Leverage
+        lines.append("")
+        lines.append("### Leverage")
+        lev = groups.get("leverage", {})
+        lines.append(f"- **Debt‑to‑Equity:** {self._fr(lev.get('de_ratio'))}")
+        lines.append(f"- **Interest Coverage:** {self._fr(lev.get('interest_coverage'))}x")
+
+        # Efficiency
+        lines.append("")
+        lines.append("### Efficiency")
+        eff = groups.get("efficiency", {})
+        lines.append(f"- **Asset Turnover:** {self._fr(eff.get('asset_turnover'))}")
+        lines.append(f"- **Inventory Turnover:** {self._fr(eff.get('inventory_turnover'))}")
+
+        return "\n".join(lines)
+
+    def _section_growth(self, metrics: dict) -> str:
+        groups = metrics.get("groups", {})
+        growth = groups.get("growth", {})
+        cf = groups.get("cash_flow", {})
+        div = groups.get("dividends", {})
+
+        lines = ["## Growth & Cash Flow", ""]
+
+        lines.append("### Year‑over‑Year Growth")
+        lines.append(f"- **Revenue Growth:** {self._fp(growth.get('revenue_growth'))}")
+        lines.append(f"- **Net Income Growth:** {self._fp(growth.get('net_income_growth'))}")
+        lines.append(f"- **EPS Growth:** {self._fp(growth.get('eps_growth'))}")
+
+        lines.append("")
+        lines.append("### Cash Flow Quality")
+        lines.append(f"- **FCF Yield:** {self._fp(cf.get('fcf_yield'))}")
+        lines.append(f"- **FCF per Share:** {self._fc(cf.get('fcf_per_share'))}")
+        lines.append(f"- **Operating CF / Net Income:** {self._fr(cf.get('ocf_to_net_income'))}")
+
+        lines.append("")
+        lines.append("### Dividends")
+        lines.append(f"- **Dividend Yield:** {self._fp(div.get('dividend_yield'))}")
+        lines.append(f"- **Payout Ratio:** {self._fp(div.get('payout_ratio'))}")
+
+        return "\n".join(lines)
+
+    def _section_technical(self, technical: dict) -> str:
+        lines = ["## Technical Analysis", ""]
+
+        # Moving averages
+        ma = technical.get("moving_averages", {})
+        lines.append("### Moving Averages")
+        for label, key in [
+            ("SMA 20", "sma_20"), ("SMA 50", "sma_50"), ("SMA 200", "sma_200"),
+            ("EMA 12", "ema_12"), ("EMA 26", "ema_26"), ("EMA 50", "ema_50"),
+        ]:
+            v = ma.get(key)
+            lines.append(f"- **{label}:** {self._fc(v)}")
+
+        # Oscillators
+        lines.append("")
+        lines.append("### Oscillators & Momentum")
+        lines.append(f"- **RSI (14):** {self._fr(technical.get('rsi'))}")
+        macd = technical.get("macd", {})
+        lines.append(f"- **MACD Line:** {self._fr(macd.get('macd_line'), 4)}")
+        lines.append(f"- **Signal Line:** {self._fr(macd.get('signal_line'), 4)}")
+        lines.append(f"- **MACD Histogram:** {self._fr(macd.get('macd_histogram'), 4)}")
+
+        # Bollinger Bands
+        bb = technical.get("bollinger_bands", {})
+        lines.append("")
+        lines.append("### Bollinger Bands (20, 2)")
+        lines.append(f"- **Upper:** {self._fc(bb.get('bb_upper'))}")
+        lines.append(f"- **Middle:** {self._fc(bb.get('bb_middle'))}")
+        lines.append(f"- **Lower:** {self._fc(bb.get('bb_lower'))}")
+        lines.append(f"- **Bandwidth:** {self._fp_raw(bb.get('bb_bandwidth'))}")
+
+        # Support / Resistance
+        sr = technical.get("support_resistance", {})
+        lines.append("")
+        lines.append("### Support & Resistance")
+        lines.append(f"- **52‑Week High:** {self._fc(sr.get('resistance_52w'))}")
+        lines.append(f"- **52‑Week Low:** {self._fc(sr.get('support_52w'))}")
+        lines.append(f"- **20‑Day High:** {self._fc(sr.get('resistance_20d'))}")
+        lines.append(f"- **20‑Day Low:** {self._fc(sr.get('support_20d'))}")
+
+        # Momentum
+        mom = technical.get("momentum", {})
+        lines.append("")
+        lines.append("### Price Momentum (Rate of Change)")
+        lines.append(f"- **5‑Day:** {self._fp_raw(mom.get('roc_5d'))}")
+        lines.append(f"- **20‑Day:** {self._fp_raw(mom.get('roc_20d'))}")
+        lines.append(f"- **60‑Day:** {self._fp_raw(mom.get('roc_60d'))}")
+
+        # ATR & Volume
+        lines.append("")
+        lines.append("### Volatility & Volume")
+        lines.append(f"- **ATR (14):** {self._fc(technical.get('atr'))}")
+        vol = technical.get("volume_profile", {})
+        lines.append(f"- **Avg Volume (20d):** {self._fn(vol.get('avg_volume_20'))}")
+        lines.append(f"- **Avg Volume (50d):** {self._fn(vol.get('avg_volume_50'))}")
+        lines.append(f"- **Volume Trend:** {(vol.get('volume_trend', 'N/A')).replace('_', ' ').title()}")
+
+        # Signals
+        signals = technical.get("trend_signals", [])
+        if signals:
+            lines.append("")
+            lines.append("### Key Signals")
+            for sig in signals:
+                lines.append(f"- {sig}")
+
+        return "\n".join(lines)
+
+    def _section_risk(self, risk: dict) -> str:
+        lines = ["## Risk Assessment", ""]
+        rating = risk.get("risk_rating", "unknown")
+        lines.append(f"**Overall Risk Rating: {rating.replace('_', ' ').upper()}**")
+
+        lines.append("")
+        lines.append("### Volatility")
+        lines.append(f"- **Annual Volatility:** {self._fp(risk.get('annual_volatility'))}")
+        lines.append(f"- **Daily Volatility:** {self._fp(risk.get('daily_volatility'))}")
+        lines.append(f"- **Beta:** {self._fr(risk.get('beta'), 3)}")
+
+        lines.append("")
+        lines.append("### Drawdown")
+        lines.append(f"- **Max Drawdown:** {self._fp_raw(risk.get('max_drawdown_pct'))}")
+
+        lines.append("")
+        lines.append("### Risk‑Adjusted Returns")
+        lines.append(f"- **Sharpe Ratio:** {self._fr(risk.get('sharpe_ratio'), 3)}")
+        lines.append(f"- **Sortino Ratio:** {self._fr(risk.get('sortino_ratio'), 3)}")
+        lines.append(f"- **Risk‑Adjusted Return:** {self._fr(risk.get('risk_adjusted_return'), 3)}")
+
+        lines.append("")
+        lines.append("### Value at Risk (Daily, 95% Confidence)")
+        lines.append(f"- **Historical VaR:** {self._fp_raw(risk.get('var_historical_95'))}")
+        lines.append(f"- **Parametric VaR:** {self._fp_raw(risk.get('var_parametric_95'))}")
+
+        if risk.get("error"):
+            lines.append(f"\n*Note: {risk['error']}*")
+
+        return "\n".join(lines)
+
+    def _section_sentiment(self, sentiment: dict) -> str:
+        lines = ["## Market Sentiment", ""]
+
+        avg = sentiment.get("average_sentiment_compound", 0)
+        analyzed = sentiment.get("analyzed_articles_count", 0)
+        positive = sentiment.get("positive_articles_count", 0)
+        negative = sentiment.get("negative_articles_count", 0)
+        neutral = sentiment.get("neutral_articles_count", 0)
+
+        if avg > 0.05:
+            mood = "Positive"
+        elif avg < -0.05:
+            mood = "Negative"
+        else:
+            mood = "Neutral"
+
+        lines.append(f"- **Overall Mood:** {mood}")
+        lines.append(f"- **Compound Score:** {self._fr(avg)}")
+        lines.append(f"- **Articles Analyzed:** {analyzed}")
+        lines.append(f"- **Breakdown:** {positive} positive, {negative} negative, {neutral} neutral")
+
+        return "\n".join(lines)
+
+    def _section_thesis(self, rec: str, reason: str, confidence: int,
+                        current_price: Optional[Number], dcf_value: Optional[Number]) -> str:
+        lines = ["## Investment Thesis", ""]
+        lines.append(
+            f"Based on a comprehensive analysis combining DCF valuation, relative multiples, "
+            f"technical indicators, risk metrics, and news sentiment, the recommendation is "
+            f"a **{rec.upper()}** with **{confidence}% confidence**."
+        )
+        if isinstance(current_price, (int, float)) and isinstance(dcf_value, (int, float)):
+            diff_pct = ((dcf_value - current_price) / current_price) * 100
+            direction = "upside" if diff_pct > 0 else "downside"
+            lines.append(
+                f"\nAt a current price of {self._fc(current_price)}, the DCF model estimates "
+                f"an intrinsic value of {self._fc(dcf_value)}, implying **{abs(diff_pct):.1f}% {direction}** potential."
+            )
+        return "\n".join(lines)
+
+    # ── main entry point ──────────────────────────────────────
 
     def run(
         self,
@@ -130,10 +410,10 @@ class SynthesisReportingAgent:
         metrics: dict,
         sentiment: dict,
         valuation: dict,
-        technical: dict | None = None,
-        risk: dict | None = None,
+        technical: dict,
+        risk: dict,
     ) -> str:
-        """Generate the final markdown report."""
+        """Generate the final comprehensive markdown report."""
         logger.info("Generating synthesis report")
 
         technical = technical or {}
@@ -141,183 +421,37 @@ class SynthesisReportingAgent:
 
         ticker = raw_data.get("ticker", "N/A").upper()
         profile = raw_data.get("profile") or {}
-        company_name = profile.get("companyName", "Unknown Company")
         prices = raw_data.get("prices", [])
         current_price = prices[0].get("close") if prices else None
         dcf_value = valuation.get("dcf_intrinsic_value_per_share")
-
-        groups = metrics.get("groups", {})
-        val_m = groups.get("valuation", {})
-        prof_m = groups.get("profitability", {})
-        liq_m = groups.get("liquidity", {})
-        lev_m = groups.get("leverage", {})
-        eff_m = groups.get("efficiency", {})
-        growth_m = groups.get("growth", {})
-        cf_m = groups.get("cash_flow", {})
-        div_m = groups.get("dividends", {})
-
-        ma = technical.get("moving_averages", {})
+        risk_rating = risk.get("risk_rating", "unknown")
         rsi = technical.get("rsi")
-        macd = technical.get("macd", {})
-        bb = technical.get("bollinger_bands", {})
-        sr = technical.get("support_resistance", {})
-        momentum = technical.get("momentum", {})
-
-        rec, rationale, confidence = self._generate_recommendation(
-            current_price, dcf_value, risk, technical,
-        )
-
-        S: list[str] = []
-
-        # ── Header ──
-        S.append(f"# {company_name} ({ticker}) — Analysis Report")
-        S.append(f"**Date:** {date.today().strftime('%B %d, %Y')}")
-        S.append(
-            f"**Sector:** {profile.get('sector', 'N/A')} — "
-            f"**Industry:** {profile.get('industry', 'N/A')}"
-        )
-
-        # ── Executive Summary ──
-        S.append("## Executive Summary")
-        S.append(
-            f"Current price: **{self._fc(current_price)}** | "
-            f"DCF Intrinsic Value: **{self._fc(dcf_value)}** | "
-            f"Recommendation: **{rec}** (confidence {confidence}%)"
-        )
-        S.append(f"\n*{rationale.capitalize()}.*")
-
-        # ── Valuation Analysis ──
-        S.append("## Valuation Analysis")
-        if isinstance(current_price, (int, float)) and isinstance(dcf_value, (int, float)) and current_price > 0:
-            upside = ((dcf_value - current_price) / current_price) * 100
-            S.append(f"- **Upside / Downside:** {upside:+.1f}%")
-        if valuation.get("wacc"):
-            S.append(f"- **WACC:** {self._fp(valuation['wacc'])}")
-        if valuation.get("error"):
-            S.append(f"- *Note: {valuation['error']}*")
-
-        S.append("\n**Valuation Multiples:**")
-        S.append(f"| Metric | Value |")
-        S.append(f"|--------|-------|")
-        S.append(f"| P/E Ratio | {self._fr(val_m.get('pe_ratio'))} |")
-        S.append(f"| P/B Ratio | {self._fr(val_m.get('pb_ratio'))} |")
-        S.append(f"| P/S Ratio | {self._fr(val_m.get('ps_ratio'))} |")
-        S.append(f"| EV/EBITDA | {self._fr(val_m.get('ev_ebitda'))} |")
-        S.append(f"| PEG Ratio | {self._fr(val_m.get('peg_ratio'))} |")
-
-        # ── Financial Health ──
-        S.append("## Financial Health")
-        S.append("### Profitability")
-        S.append(f"| Metric | Value |")
-        S.append(f"|--------|-------|")
-        S.append(f"| Gross Margin | {self._fp(prof_m.get('gross_margin'))} |")
-        S.append(f"| Operating Margin | {self._fp(prof_m.get('operating_margin'))} |")
-        S.append(f"| Net Margin | {self._fp(prof_m.get('net_margin'))} |")
-        S.append(f"| ROE | {self._fp(prof_m.get('roe'))} |")
-        S.append(f"| ROA | {self._fp(prof_m.get('roa'))} |")
-        S.append(f"| ROIC | {self._fp(prof_m.get('roic'))} |")
-
-        S.append("### Liquidity & Leverage")
-        S.append(f"| Metric | Value |")
-        S.append(f"|--------|-------|")
-        S.append(f"| Current Ratio | {self._fr(liq_m.get('current_ratio'))} |")
-        S.append(f"| Quick Ratio | {self._fr(liq_m.get('quick_ratio'))} |")
-        S.append(f"| Debt/Equity | {self._fr(lev_m.get('de_ratio'))} |")
-        S.append(f"| Interest Coverage | {self._fr(lev_m.get('interest_coverage'))} |")
-
-        S.append("### Efficiency")
-        S.append(f"- **Asset Turnover:** {self._fr(eff_m.get('asset_turnover'))}")
-        S.append(f"- **Inventory Turnover:** {self._fr(eff_m.get('inventory_turnover'))}")
-
-        # ── Growth & Cash Flow ──
-        S.append("## Growth & Cash Flow")
-        S.append(f"| Metric | Value |")
-        S.append(f"|--------|-------|")
-        S.append(f"| Revenue Growth (YoY) | {self._fp(growth_m.get('revenue_growth'))} |")
-        S.append(f"| Net Income Growth | {self._fp(growth_m.get('net_income_growth'))} |")
-        S.append(f"| EPS Growth | {self._fp(growth_m.get('eps_growth'))} |")
-        S.append(f"| FCF Yield | {self._fp(cf_m.get('fcf_yield'))} |")
-        S.append(f"| FCF / Share | {self._fc(cf_m.get('fcf_per_share'))} |")
-        S.append(f"| OCF / Net Income | {self._fr(cf_m.get('ocf_to_net_income'))} |")
-        if div_m.get("dividend_yield"):
-            S.append(f"| Dividend Yield | {self._fp(div_m.get('dividend_yield'))} |")
-            S.append(f"| Payout Ratio | {self._fr(div_m.get('payout_ratio'))} |")
-
-        # ── Technical Analysis ──
-        S.append("## Technical Analysis")
-        S.append("### Moving Averages & Trend")
-        S.append(f"- SMA 20: {self._fc(ma.get('sma_20'))} | SMA 50: {self._fc(ma.get('sma_50'))} | SMA 200: {self._fc(ma.get('sma_200'))}")
-        S.append(f"- EMA 12: {self._fc(ma.get('ema_12'))} | EMA 26: {self._fc(ma.get('ema_26'))}")
-
-        S.append("### Oscillators")
-        S.append(f"- **RSI (14):** {self._fr(rsi)}")
-        S.append(f"- **MACD:** {self._fr(macd.get('macd_line'), 4)} | Signal: {self._fr(macd.get('signal_line'), 4)} | Histogram: {self._fr(macd.get('macd_histogram'), 4)}")
-
-        S.append("### Bollinger Bands")
-        S.append(f"- Upper: {self._fc(bb.get('bb_upper'))} | Middle: {self._fc(bb.get('bb_middle'))} | Lower: {self._fc(bb.get('bb_lower'))}")
-        S.append(f"- Bandwidth: {self._fp_raw(bb.get('bb_bandwidth'))}")
-
-        if technical.get("atr"):
-            S.append(f"- **ATR (14):** {self._fc(technical['atr'])}")
-
-        S.append("### Support & Resistance")
-        S.append(f"- 52-Week High: {self._fc(sr.get('resistance_52w'))} | Low: {self._fc(sr.get('support_52w'))}")
-        S.append(f"- 20-Day High: {self._fc(sr.get('resistance_20d'))} | Low: {self._fc(sr.get('support_20d'))}")
-
-        S.append("### Momentum")
-        S.append(f"- 5-Day ROC: {self._fp_raw(momentum.get('roc_5d'))} | 20-Day: {self._fp_raw(momentum.get('roc_20d'))} | 60-Day: {self._fp_raw(momentum.get('roc_60d'))}")
-
         trend_signals = technical.get("trend_signals", [])
-        if trend_signals:
-            S.append("\n**Trend Signals:**")
-            for sig in trend_signals:
-                S.append(f"- {sig}")
 
-        # ── Risk Assessment ──
-        S.append("## Risk Assessment")
-        rating = risk.get("risk_rating", "unknown").replace("_", " ").title()
-        S.append(f"**Overall Risk Rating: {rating}**")
-        S.append(f"| Metric | Value |")
-        S.append(f"|--------|-------|")
-        S.append(f"| Annual Volatility | {self._fp_raw(risk.get('annual_volatility', 0) * 100 if risk.get('annual_volatility') else None)} |")
-        S.append(f"| Sharpe Ratio | {self._fr(risk.get('sharpe_ratio'), 3)} |")
-        S.append(f"| Sortino Ratio | {self._fr(risk.get('sortino_ratio'), 3)} |")
-        S.append(f"| Max Drawdown | {self._fp_raw(risk.get('max_drawdown_pct'))} |")
-        S.append(f"| Beta | {self._fr(risk.get('beta'), 3)} |")
-        S.append(f"| VaR (95%, Daily) | {self._fp_raw(risk.get('var_historical_95'))} |")
-
-        # ── Market Sentiment ──
-        S.append("## Market Sentiment")
-        avg_sent = sentiment.get("average_sentiment_compound", 0)
-        if avg_sent > 0.05:
-            sent_label = "Positive"
-        elif avg_sent < -0.05:
-            sent_label = "Negative"
-        else:
-            sent_label = "Neutral"
-
-        S.append(f"**Overall Sentiment: {sent_label}** (compound score: {self._fr(avg_sent, 3)})")
-        analyzed = sentiment.get("analyzed_articles_count", 0)
-        pos = sentiment.get("positive_articles_count", 0)
-        neg = sentiment.get("negative_articles_count", 0)
-        neu = sentiment.get("neutral_articles_count", 0)
-        S.append(f"- Analyzed **{analyzed}** recent news articles")
-        S.append(f"- {pos} positive | {neu} neutral | {neg} negative")
-
-        # ── Investment Thesis ──
-        S.append("## Investment Thesis & Recommendation")
-        S.append(f"### Recommendation: {rec}")
-        S.append(f"**Confidence Score: {confidence}%**")
-        S.append(f"\n{rationale.capitalize()}.")
-
-        # ── Disclaimer ──
-        S.append("\n---")
-        S.append(
-            "*Disclaimer: This report is generated by an automated AI system and is for "
-            "informational purposes only. It does not constitute financial advice. "
-            "Always conduct your own due diligence before making investment decisions.*"
+        rec, reason, confidence = self._generate_recommendation(
+            current_price, dcf_value, risk_rating, rsi, trend_signals,
         )
 
-        report = "\n\n".join(S)
-        logger.info("Synthesis report generated (%d chars, %d sections)", len(report), len(S))
+        sections = [
+            self._section_header(profile, ticker, current_price),
+            self._section_executive_summary(rec, reason, confidence, risk_rating, current_price, dcf_value, metrics, technical),
+            self._section_valuation(valuation, metrics),
+            self._section_financial_health(metrics),
+            self._section_growth(metrics),
+            self._section_technical(technical),
+            self._section_risk(risk),
+            self._section_sentiment(sentiment),
+            self._section_thesis(rec, reason, confidence, current_price, dcf_value),
+            (
+                "\n---\n\n"
+                "*Disclaimer: This report is generated by an automated AI system and is for "
+                "informational purposes only. It does not constitute financial advice. "
+                "Always conduct your own research and consult a licensed financial advisor "
+                "before making investment decisions.*"
+            ),
+        ]
+
+        report = "\n\n".join(sections)
+        logger.info("Synthesis report generated (%d characters, recommendation=%s, confidence=%d%%)",
+                     len(report), rec, confidence)
         return report
