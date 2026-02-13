@@ -22,6 +22,17 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Stock Analyzer AI...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified.")
+
+    # Auto-migrate: add chart_data column if it doesn't exist yet
+    from sqlalchemy import text, inspect as sa_inspect
+    with engine.connect() as conn:
+        inspector = sa_inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("reports")]
+        if "chart_data" not in columns:
+            conn.execute(text("ALTER TABLE reports ADD COLUMN chart_data TEXT"))
+            conn.commit()
+            logger.info("Migration: added chart_data column to reports table.")
+
     yield
     logger.info("Shutting down Stock Analyzer AI...")
     engine.dispose()

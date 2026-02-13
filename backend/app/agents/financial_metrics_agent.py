@@ -20,14 +20,16 @@ logger = logging.getLogger("stock_analyzer.agents.financial_metrics")
 
 
 class FinancialMetricsAgent:
-    """Calculates key financial metrics from raw financial data."""
+    """Calculates comprehensive financial metrics from raw data."""
+
+    # ── helpers ────────────────────────────────────────────────
 
     # ── helpers ────────────────────────────────────────────────
 
     def _safe_divide(self, numerator: Any, denominator: Any) -> Optional[float]:
         """Safely divide two numbers, returning None on failure."""
         try:
-            if numerator is None or denominator is None or denominator == 0:
+            if numerator is None or denominator is None or float(denominator) == 0:
                 return None
             return float(numerator) / float(denominator)
         except (TypeError, ValueError):

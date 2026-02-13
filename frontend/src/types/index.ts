@@ -42,6 +42,7 @@ export interface AnalysisJob {
 export interface Report {
   id: number;
   content: string;
+  chart_data: ChartData | null;
   job_id: number;
   created_at: string;
 }

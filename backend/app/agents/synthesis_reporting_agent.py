@@ -27,11 +27,7 @@ Number = Union[int, float]
 class SynthesisReportingAgent:
     """Synthesizes all analysis results into a formatted markdown report."""
 
-    # Valuation thresholds for recommendations
-    STRONG_BUY_THRESHOLD = 0.20
-    BUY_THRESHOLD = 0.05
-    SELL_THRESHOLD = -0.05
-    STRONG_SELL_THRESHOLD = -0.20
+    # ── formatting helpers ─────────────────────────────────────
 
     # ── formatters ────────────────────────────────────────────
 
@@ -419,6 +415,9 @@ class SynthesisReportingAgent:
     ) -> str:
         """Generate the final comprehensive markdown report."""
         logger.info("Generating synthesis report")
+
+        technical = technical or {}
+        risk = risk or {}
 
         ticker = raw_data.get("ticker", "N/A").upper()
         profile = raw_data.get("profile") or {}

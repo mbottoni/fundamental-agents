@@ -6,7 +6,362 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
-import type { Report } from '@/types';
+import type { Report, ChartData, PricePoint, BarDataPoint } from '@/types';
+import {
+  AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  ReferenceLine, Legend, RadialBarChart, RadialBar,
+  ComposedChart,
+} from 'recharts';
+
+/* ═══════════════════════════════════════════════════════════════
+   Shared Styles / Constants
+   ═══════════════════════════════════════════════════════════════ */
+
+const COLORS = {
+  blue: '#60a5fa',
+  cyan: '#22d3ee',
+  emerald: '#34d399',
+  amber: '#fbbf24',
+  red: '#f87171',
+  purple: '#a78bfa',
+  gray: '#6b7280',
+  white: '#ffffff',
+  dark: '#111827',
+  darkCard: 'rgba(17,24,39,0.6)',
+};
+
+const CHART_MARGINS = { top: 10, right: 10, left: 0, bottom: 0 };
+
+/* ─── helpers ────────────────────────────────────────────────── */
+
+const fmtCurrency = (v: number | null | undefined) =>
+  v != null ? `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
+
+const fmtPct = (v: number | null | undefined) =>
+  v != null ? `${v.toFixed(2)}%` : 'N/A';
+
+const fmtNum = (v: number | null | undefined) =>
+  v != null ? v.toFixed(2) : 'N/A';
+
+const shortDate = (d: string) => {
+  const parts = d.split('-');
+  return `${parts[1]}/${parts[2]}`;
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   Chart Section Wrapper
+   ═══════════════════════════════════════════════════════════════ */
+
+function ChartSection({ title, subtitle, children, id }: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  id?: string;
+}) {
+  return (
+    <section id={id} className="glass-card p-6 md:p-8">
+      <h2 className="text-xl font-bold text-white mb-1">{title}</h2>
+      {subtitle && <p className="text-sm text-gray-400 mb-6">{subtitle}</p>}
+      {!subtitle && <div className="mb-6" />}
+      {children}
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Custom Tooltip
+   ═══════════════════════════════════════════════════════════════ */
+
+function ChartTooltip({ active, payload, label, formatter }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      {payload.map((entry: any, idx: number) => (
+        <p key={idx} className="text-sm font-medium" style={{ color: entry.color || COLORS.white }}>
+          {entry.name}: {formatter ? formatter(entry.value) : entry.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Price History Chart (with Volume bars)
+   ═══════════════════════════════════════════════════════════════ */
+
+function PriceChart({ data, ma }: { data: PricePoint[]; ma: ChartData['moving_averages'] }) {
+  if (!data.length) return <p className="text-gray-500">No price data available.</p>;
+
+  const chartData = data.map(p => ({
+    date: shortDate(p.date),
+    close: p.close,
+    volume: p.volume || 0,
+  }));
+
+  return (
+    <div className="space-y-4">
+      {/* Moving average legend */}
+      <div className="flex gap-4 text-xs text-gray-400">
+        {ma.sma_20 && <span><span className="inline-block w-3 h-0.5 bg-blue-400 mr-1" />SMA 20: {fmtCurrency(ma.sma_20)}</span>}
+        {ma.sma_50 && <span><span className="inline-block w-3 h-0.5 bg-cyan-400 mr-1" />SMA 50: {fmtCurrency(ma.sma_50)}</span>}
+        {ma.sma_200 && <span><span className="inline-block w-3 h-0.5 bg-amber-400 mr-1" />SMA 200: {fmtCurrency(ma.sma_200)}</span>}
+      </div>
+
+      {/* Price area */}
+      <ResponsiveContainer width="100%" height={320}>
+        <ComposedChart data={chartData} margin={CHART_MARGINS}>
+          <defs>
+            <linearGradient id="gradPrice" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={COLORS.blue} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={COLORS.blue} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+          <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} interval="preserveStartEnd" />
+          <YAxis yAxisId="price" domain={['auto', 'auto']} tick={{ fill: '#6b7280', fontSize: 10 }} />
+          <YAxis yAxisId="vol" orientation="right" tick={false} />
+          <Tooltip content={<ChartTooltip formatter={fmtCurrency} />} />
+
+          <Bar yAxisId="vol" dataKey="volume" fill="rgba(96,165,250,0.08)" barSize={4} />
+          <Area yAxisId="price" type="monotone" dataKey="close" stroke={COLORS.blue} fill="url(#gradPrice)" strokeWidth={2} dot={false} />
+
+          {ma.sma_20 && <ReferenceLine yAxisId="price" y={ma.sma_20} stroke={COLORS.blue} strokeDasharray="4 4" strokeOpacity={0.5} />}
+          {ma.sma_50 && <ReferenceLine yAxisId="price" y={ma.sma_50} stroke={COLORS.cyan} strokeDasharray="4 4" strokeOpacity={0.5} />}
+          {ma.sma_200 && <ReferenceLine yAxisId="price" y={ma.sma_200} stroke={COLORS.amber} strokeDasharray="4 4" strokeOpacity={0.5} />}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RSI Gauge
+   ═══════════════════════════════════════════════════════════════ */
+
+function RSIGauge({ value }: { value: number | null }) {
+  if (value == null) return <p className="text-gray-500 text-sm">RSI data unavailable.</p>;
+
+  const color = value > 70 ? COLORS.red : value < 30 ? COLORS.emerald : COLORS.blue;
+  const label = value > 70 ? 'Overbought' : value < 30 ? 'Oversold' : 'Neutral';
+
+  const gaugeData = [{ name: 'RSI', value, fill: color }];
+
+  return (
+    <div className="flex items-center gap-6">
+      <ResponsiveContainer width={140} height={140}>
+        <RadialBarChart
+          innerRadius="70%"
+          outerRadius="100%"
+          data={gaugeData}
+          startAngle={180}
+          endAngle={0}
+          barSize={12}
+        >
+          <RadialBar background={{ fill: 'rgba(255,255,255,0.05)' }} dataKey="value" cornerRadius={6} />
+        </RadialBarChart>
+      </ResponsiveContainer>
+      <div>
+        <p className="text-4xl font-bold" style={{ color }}>{value.toFixed(1)}</p>
+        <p className="text-sm text-gray-400">{label}</p>
+        <div className="flex gap-3 mt-2 text-xs text-gray-500">
+          <span>{'<30 Oversold'}</span>
+          <span>{'30-70 Neutral'}</span>
+          <span>{'>70 Overbought'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Horizontal Bar Chart (for profitability, growth, etc.)
+   ═══════════════════════════════════════════════════════════════ */
+
+function MetricBars({ data, color, formatter }: {
+  data: BarDataPoint[];
+  color: string;
+  formatter?: (v: number) => string;
+}) {
+  const filtered = data.filter(d => d.value != null);
+  if (!filtered.length) return <p className="text-gray-500 text-sm">No data available.</p>;
+
+  return (
+    <ResponsiveContainer width="100%" height={filtered.length * 44 + 20}>
+      <BarChart data={filtered} layout="vertical" margin={{ ...CHART_MARGINS, left: 80 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={false} />
+        <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 10 }} />
+        <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} width={80} />
+        <Tooltip content={<ChartTooltip formatter={formatter || fmtPct} />} />
+        <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]} barSize={20} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Sentiment Donut
+   ═══════════════════════════════════════════════════════════════ */
+
+function SentimentDonut({ data, score }: { data: ChartData['sentiment']; score: number }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (!total) return <p className="text-gray-500 text-sm">No sentiment data.</p>;
+
+  const label = score > 0.05 ? 'Positive' : score < -0.05 ? 'Negative' : 'Neutral';
+  const labelColor = score > 0.05 ? COLORS.emerald : score < -0.05 ? COLORS.red : COLORS.gray;
+
+  return (
+    <div className="flex items-center gap-8">
+      <ResponsiveContainer width={180} height={180}>
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={50}
+            outerRadius={80}
+            paddingAngle={3}
+            dataKey="value"
+            stroke="none"
+          >
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip content={<ChartTooltip />} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm text-gray-400">Overall Sentiment</p>
+          <p className="text-2xl font-bold" style={{ color: labelColor }}>{label}</p>
+          <p className="text-sm text-gray-500">Compound: {score.toFixed(3)}</p>
+        </div>
+        <div className="space-y-1">
+          {data.map((d, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+              <span className="text-gray-300">{d.name}</span>
+              <span className="text-gray-500">{d.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Risk Rating Badge
+   ═══════════════════════════════════════════════════════════════ */
+
+function RiskBadge({ rating }: { rating: string }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    low: { bg: 'bg-emerald-500/10 border-emerald-500/30', text: 'text-emerald-400', label: 'Low Risk' },
+    moderate: { bg: 'bg-amber-500/10 border-amber-500/30', text: 'text-amber-400', label: 'Moderate Risk' },
+    high: { bg: 'bg-orange-500/10 border-orange-500/30', text: 'text-orange-400', label: 'High Risk' },
+    very_high: { bg: 'bg-red-500/10 border-red-500/30', text: 'text-red-400', label: 'Very High Risk' },
+  };
+  const c = config[rating] || config['moderate'];
+  return (
+    <span className={`inline-flex items-center px-4 py-1.5 rounded-full border text-sm font-semibold ${c.bg} ${c.text}`}>
+      {c.label}
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Stat Card (small KPI)
+   ═══════════════════════════════════════════════════════════════ */
+
+function Stat({ label, value, sub, color }: {
+  label: string;
+  value: string;
+  sub?: string;
+  color?: string;
+}) {
+  return (
+    <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <p className={`text-lg font-bold ${color || 'text-white'}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DCF Comparison
+   ═══════════════════════════════════════════════════════════════ */
+
+function DCFComparison({ dcf }: { dcf: ChartData['dcf'] }) {
+  if (!dcf.intrinsic_value || !dcf.current_price) return null;
+
+  const upside = ((dcf.intrinsic_value - dcf.current_price) / dcf.current_price) * 100;
+  const isUndervalued = upside > 0;
+
+  const barData = [
+    { name: 'Current Price', value: dcf.current_price, fill: COLORS.gray },
+    { name: 'Intrinsic Value (DCF)', value: dcf.intrinsic_value, fill: isUndervalued ? COLORS.emerald : COLORS.red },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-baseline gap-3">
+        <span className={`text-3xl font-bold ${isUndervalued ? 'text-emerald-400' : 'text-red-400'}`}>
+          {upside > 0 ? '+' : ''}{upside.toFixed(1)}%
+        </span>
+        <span className="text-gray-400 text-sm">{isUndervalued ? 'upside potential' : 'overvalued'}</span>
+      </div>
+      <ResponsiveContainer width="100%" height={100}>
+        <BarChart data={barData} layout="vertical" margin={{ ...CHART_MARGINS, left: 130 }}>
+          <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 10 }} />
+          <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 12 }} width={130} />
+          <Tooltip content={<ChartTooltip formatter={fmtCurrency} />} />
+          <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={24}>
+            {barData.map((entry, idx) => (
+              <Cell key={idx} fill={entry.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+      {dcf.wacc && (
+        <p className="text-xs text-gray-500">WACC: {(dcf.wacc * 100).toFixed(2)}%</p>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Trend Signals List
+   ═══════════════════════════════════════════════════════════════ */
+
+function TrendSignals({ signals }: { signals: string[] }) {
+  if (!signals.length) return null;
+
+  return (
+    <div className="space-y-2">
+      {signals.map((s, i) => {
+        const isBullish = s.toLowerCase().includes('bullish');
+        const isBearish = s.toLowerCase().includes('bearish');
+        const color = isBullish ? 'text-emerald-400' : isBearish ? 'text-red-400' : 'text-gray-300';
+        const bg = isBullish ? 'bg-emerald-500/5' : isBearish ? 'bg-red-500/5' : 'bg-white/5';
+        return (
+          <div key={i} className={`${bg} rounded-lg px-4 py-2.5 border border-white/5 flex items-center gap-3`}>
+            <span className={`text-lg ${isBullish ? 'text-emerald-400' : isBearish ? 'text-red-400' : 'text-gray-400'}`}>
+              {isBullish ? '↑' : isBearish ? '↓' : '→'}
+            </span>
+            <span className={`text-sm ${color}`}>{s}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN REPORT PAGE
+   ═══════════════════════════════════════════════════════════════ */
 
 export default function ReportPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -26,19 +381,16 @@ export default function ReportPage() {
 
   useEffect(() => {
     if (!reportId || !isAuthenticated) return;
-
-    const fetchReport = async () => {
+    (async () => {
       try {
-        const response = await api.get<Report>(`/reports/${reportId}`);
-        setReport(response.data);
+        const res = await api.get<Report>(`/reports/${reportId}`);
+        setReport(res.data);
       } catch {
         setError('Failed to fetch report. It may not exist or you may not have access.');
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchReport();
+    })();
   }, [reportId, isAuthenticated]);
 
   // Extract sections from markdown for the sidebar nav
