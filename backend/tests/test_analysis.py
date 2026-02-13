@@ -48,19 +48,20 @@ class TestAnalysisEndpoints:
 class TestFreeTierLimits:
     def test_free_tier_limit_enforced(self, client: TestClient, auth_headers):
         """Free users should be limited to the configured daily cap."""
+        tickers = ["AAPL", "MSFT", "GOOG"]
         # Create jobs up to the limit (default is 3)
-        for i in range(3):
+        for i, ticker in enumerate(tickers):
             resp = client.post(
                 "/api/v1/analysis/",
-                json={"ticker": f"T{i}"},
+                json={"ticker": ticker},
                 headers=auth_headers,
             )
-            assert resp.status_code == 202, f"Job {i} should succeed"
+            assert resp.status_code == 202, f"Job {i} ({ticker}) should succeed"
 
         # The 4th should be rejected
         resp = client.post(
             "/api/v1/analysis/",
-            json={"ticker": "FAIL"},
+            json={"ticker": "TSLA"},
             headers=auth_headers,
         )
         assert resp.status_code == 429
