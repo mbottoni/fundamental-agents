@@ -1,32 +1,58 @@
 import Link from 'next/link';
-import Image from 'next/image';
+
+/* ── Stock data for marquees ─────────────────────────────────── */
+const POPULAR_STOCKS = [
+  { ticker: 'AAPL', name: 'Apple Inc' },
+  { ticker: 'NVDA', name: 'NVIDIA Corp' },
+  { ticker: 'MSFT', name: 'Microsoft Corp' },
+  { ticker: 'AMZN', name: 'Amazon.com Inc' },
+  { ticker: 'GOOG', name: 'Alphabet Inc' },
+  { ticker: 'META', name: 'Meta Platforms' },
+  { ticker: 'TSLA', name: 'Tesla Inc' },
+  { ticker: 'BRK.B', name: 'Berkshire Hathaway' },
+  { ticker: 'AVGO', name: 'Broadcom Inc' },
+  { ticker: 'LLY', name: 'Eli Lilly & Co' },
+  { ticker: 'WMT', name: 'Walmart Inc' },
+  { ticker: 'V', name: 'Visa Inc' },
+  { ticker: 'XOM', name: 'Exxon Mobil' },
+  { ticker: 'MA', name: 'Mastercard Inc' },
+  { ticker: 'COST', name: 'Costco Wholesale' },
+  { ticker: 'HD', name: 'Home Depot Inc' },
+  { ticker: 'PG', name: 'Procter & Gamble' },
+  { ticker: 'NFLX', name: 'Netflix Inc' },
+];
+
+const CATEGORIES = [
+  'AI Stocks', 'Semiconductors', 'Cybersecurity', 'Biotechnology',
+  'Electric Vehicles', 'FinTech', 'Renewables', 'Space Stocks',
+  'E-commerce', 'Cloud Computing', 'Healthcare', 'Dividends',
+];
 
 export default function Home() {
   return (
-    <div className="bg-gray-950 text-white min-h-screen">
+    <div className="bg-white text-gray-900 min-h-screen">
       {/* ── Navigation ─────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-transparent">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
+          <div className="flex justify-between items-center h-16">
             <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center border border-white/20">
+              <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
-              <span className="text-lg font-semibold tracking-tight">StockAnalyzer AI</span>
+              <span className="text-lg font-bold tracking-tight">StockAnalyzer</span>
             </Link>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/login"
-                className="text-sm text-gray-300 hover:text-white transition px-4 py-2"
-              >
-                Log In
+            <div className="hidden md:flex items-center gap-8">
+              <Link href="/pricing" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Pricing</Link>
+              <Link href="/login" className="text-sm text-gray-500 hover:text-gray-900 transition font-medium">Log In</Link>
+              <Link href="/register" className="text-sm bg-brand-600 hover:bg-brand-700 text-white px-5 py-2 rounded-lg transition font-semibold">
+                Sign Up
               </Link>
-              <Link
-                href="/register"
-                className="text-sm bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white px-5 py-2 rounded-lg transition"
-              >
+            </div>
+            <div className="md:hidden flex items-center gap-3">
+              <Link href="/login" className="text-sm text-gray-500 font-medium">Log In</Link>
+              <Link href="/register" className="text-sm bg-brand-600 text-white px-4 py-1.5 rounded-lg font-semibold">
                 Sign Up
               </Link>
             </div>
@@ -35,262 +61,566 @@ export default function Home() {
       </nav>
 
       {/* ── Hero Section ───────────────────────────────────── */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0">
-          <Image
-            src="/mountain.jpg"
-            alt="Mountain landscape"
-            fill
-            className="object-cover"
-            priority
-            quality={85}
-          />
-          {/* Gradient overlays */}
-          <div className="absolute inset-0 bg-gradient-to-b from-gray-950/70 via-gray-950/50 to-gray-950" />
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-950/30 to-transparent" />
-        </div>
-
-        {/* Hero Content */}
-        <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-          <div className="mb-6">
-            <span className="inline-block text-xs font-medium tracking-widest uppercase text-blue-400/80 bg-blue-400/10 border border-blue-400/20 px-4 py-1.5 rounded-full backdrop-blur-sm">
-              Multi-Agent AI Analysis Platform
-            </span>
-          </div>
-
-          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tight leading-[0.95] mb-8">
-            Don&apos;t just watch
-            <br />
-            the market.
-            <br />
-            <span className="text-gradient">Analyze it.</span>
+      <section className="pt-32 pb-8 px-6">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.05] mb-6">
+            Next-level Stock Investing{' '}
+            <span className="text-brand-600">powered by AI</span>
           </h1>
-
-          <p className="text-lg md:text-xl text-gray-300/90 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Institutional-grade stock analysis powered by AI agents.
-            DCF valuation, technical indicators, risk metrics, and sentiment —
-            all in one comprehensive report.
+          <p className="text-lg md:text-xl text-gray-500 max-w-2xl mx-auto mb-10 leading-relaxed">
+            Our mission is to help you make better investment decisions.
+            Comprehensive AI-powered analysis with DCF valuation, technical indicators,
+            risk metrics, and sentiment — all in one report.
           </p>
-
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/dashboard" className="btn-primary">
-              Start Analyzing
+            <Link href="/register" className="btn-primary">
+              Start now for free
             </Link>
-            <Link href="/register" className="btn-secondary">
-              Sign Up Free
+            <Link href="/pricing" className="btn-secondary">
+              Pricing
             </Link>
-          </div>
-
-          {/* Scroll indicator */}
-          <div className="mt-20 animate-bounce">
-            <svg className="w-5 h-5 mx-auto text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
           </div>
         </div>
       </section>
 
-      {/* ── How It Works ───────────────────────────────────── */}
-      <section className="relative py-32 px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-20">
-            <p className="text-sm font-medium tracking-widest uppercase text-gray-500 mb-3">How it works</p>
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-              From ticker to thesis.
-            </h2>
+      {/* ── Stock Ticker Marquee ──────────────────────────── */}
+      <section className="py-10">
+        <div className="marquee-container">
+          <div className="marquee-track animate-marquee">
+            {[...POPULAR_STOCKS, ...POPULAR_STOCKS].map((stock, i) => (
+              <div key={i} className="flex-shrink-0 flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-xl px-5 py-3 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="w-10 h-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm">
+                  {stock.ticker.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">{stock.ticker}</p>
+                  <p className="text-xs text-gray-400">{stock.name}</p>
+                </div>
+              </div>
+            ))}
           </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Step 1 */}
-            <div className="glass-card p-8 group hover:border-white/20 transition-all duration-500">
-              <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500">
-                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                </svg>
+        </div>
+        <div className="marquee-container mt-4">
+          <div className="marquee-track animate-marquee-reverse">
+            {[...POPULAR_STOCKS.slice(9), ...POPULAR_STOCKS.slice(0, 9), ...POPULAR_STOCKS.slice(9), ...POPULAR_STOCKS.slice(0, 9)].map((stock, i) => (
+              <div key={i} className="flex-shrink-0 flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-xl px-5 py-3 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="w-10 h-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm">
+                  {stock.ticker.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">{stock.ticker}</p>
+                  <p className="text-xs text-gray-400">{stock.name}</p>
+                </div>
               </div>
-              <p className="text-xs font-medium tracking-widest uppercase text-gray-500 mb-2">Step 01</p>
-              <h3 className="text-xl font-semibold mb-3">Data Gathering</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                Real-time financial statements, historical prices, company profiles,
-                and news articles — all gathered automatically from institutional data sources.
-              </p>
-              <div className="mt-6 p-4 rounded-lg bg-gray-950/50 font-mono text-xs text-gray-500 border border-white/5">
-                <span className="text-blue-400">agent</span>.gather(<span className="text-emerald-400">&quot;AAPL&quot;</span>)<br />
-                <span className="text-gray-600">→ income_statement, balance_sheet,</span><br />
-                <span className="text-gray-600">&nbsp;&nbsp;cash_flow, prices, profile</span>
-              </div>
-            </div>
-
-            {/* Step 2 */}
-            <div className="glass-card p-8 group hover:border-white/20 transition-all duration-500">
-              <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500">
-                <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-                </svg>
-              </div>
-              <p className="text-xs font-medium tracking-widest uppercase text-gray-500 mb-2">Step 02</p>
-              <h3 className="text-xl font-semibold mb-3">Multi-Agent Analysis</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                Five specialized AI agents run in parallel — financial metrics,
-                technicals (RSI, MACD, Bollinger), DCF valuation, risk assessment,
-                and sentiment analysis.
-              </p>
-              <div className="mt-6 p-4 rounded-lg bg-gray-950/50 font-mono text-xs text-gray-500 border border-white/5">
-                <span className="text-cyan-400">pipeline</span>.run([<br />
-                &nbsp;&nbsp;metrics, technicals,<br />
-                &nbsp;&nbsp;valuation, risk, sentiment<br />
-                ])
-              </div>
-            </div>
-
-            {/* Step 3 */}
-            <div className="glass-card p-8 group hover:border-white/20 transition-all duration-500">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500">
-                <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
-              </div>
-              <p className="text-xs font-medium tracking-widest uppercase text-gray-500 mb-2">Step 03</p>
-              <h3 className="text-xl font-semibold mb-3">Comprehensive Report</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                Everything synthesized into a professional report with 30+ metrics,
-                risk ratings, confidence scores, and a clear investment thesis.
-              </p>
-              <div className="mt-6 p-4 rounded-lg bg-gray-950/50 font-mono text-xs text-gray-500 border border-white/5">
-                <span className="text-emerald-400">report</span>.generate()<br />
-                <span className="text-gray-600">→ Recommendation: </span><span className="text-white">BUY</span><br />
-                <span className="text-gray-600">&nbsp;&nbsp;Confidence: </span><span className="text-white">78%</span>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Metrics Grid ───────────────────────────────────── */}
-      <section className="py-24 px-6 border-t border-white/5">
+      {/* ── Features Overview ─────────────────────────────── */}
+      <section className="py-24 px-6 section-gray">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
-              Professional-grade analysis.
+              We help you make better investments.
             </h2>
-            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-              Every report includes institutional-level depth across four key dimensions.
+            <p className="text-gray-500 text-lg max-w-2xl mx-auto">
+              AI-powered stock analysis, risk assessment, and portfolio insights to
+              help you find the best investment opportunities.
             </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard
-              number="30+"
-              label="Financial Metrics"
-              detail="P/E, ROE, ROIC, margins, growth rates, FCF yield, and more"
-              color="blue"
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <FeatureCard
+              icon={<ChartIcon />}
+              title="Graphical Representation"
+              description="We use charts, heatmaps, and interactive visualizations to make complex financial data simple and actionable."
             />
-            <MetricCard
-              number="12"
-              label="Technical Indicators"
-              detail="RSI, MACD, Bollinger Bands, moving averages, ATR, momentum"
-              color="cyan"
+            <FeatureCard
+              icon={<AnalyticsIcon />}
+              title="Fundamental Analysis"
+              description="Over 30 fundamental ratios including P/E, ROIC, margins, growth rates, FCF yield, and more for every stock."
             />
-            <MetricCard
-              number="8"
-              label="Risk Metrics"
-              detail="Sharpe, Sortino, VaR, max drawdown, volatility, beta"
-              color="amber"
+            <FeatureCard
+              icon={<TechnicalIcon />}
+              title="Technical Indicators"
+              description="RSI, MACD, Bollinger Bands, moving averages, ATR, momentum — all calculated and visualized for you."
             />
-            <MetricCard
-              number="20+"
-              label="News Articles"
-              detail="Real-time sentiment analysis with NLP scoring"
-              color="emerald"
+            <FeatureCard
+              icon={<ValuationIcon />}
+              title="Professional Valuations"
+              description="DCF intrinsic value calculations with WACC, along with relative valuation multiples and peer comparisons."
+            />
+            <FeatureCard
+              icon={<ShieldIcon />}
+              title="Risk Assessment"
+              description="Sharpe ratio, Sortino, VaR, max drawdown, beta, and volatility metrics with clear risk ratings."
+            />
+            <FeatureCard
+              icon={<SentimentIcon />}
+              title="News Sentiment"
+              description="Real-time sentiment analysis of 20+ news articles using NLP to gauge market perception."
             />
           </div>
         </div>
       </section>
 
-      {/* ── CTA Section ────────────────────────────────────── */}
-      <section className="relative py-32 px-6 overflow-hidden">
-        {/* Subtle background image */}
-        <div className="absolute inset-0 opacity-10">
-          <Image
-            src="/mountain.jpg"
-            alt=""
-            fill
-            className="object-cover"
-            quality={50}
-          />
+      {/* ── Step 1: Stock Analysis ────────────────────────── */}
+      <section className="py-24 px-6 section-light">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <span className="step-badge">Stock Analysis</span>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mt-6 mb-4">
+                Analyze stocks to find the best investments
+              </h2>
+              <p className="text-gray-500 mb-8 leading-relaxed">
+                Our AI-powered stock analysis provides institutional-grade research in
+                under a minute. Enter any ticker and get a comprehensive report with
+                valuation, financial health, growth metrics, and a clear investment thesis.
+              </p>
+              <div className="space-y-4 mb-8">
+                <FeatureListItem title="Multi-layered Analysis" description="Comprehensive reports covering valuation, growth, profitability, risk, and sentiment." />
+                <FeatureListItem title="Intelligent Valuations" description="DCF intrinsic value calculations alongside relative valuation multiples." />
+                <FeatureListItem title="100+ Financial Metrics" description="Deep-dive into every aspect of a company's financial performance." />
+              </div>
+              <Link href="/register" className="btn-primary inline-block">
+                Get Started now
+              </Link>
+            </div>
+            <div className="relative">
+              <div className="card-light-elevated p-6 lg:p-8">
+                <AnalysisPreview />
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="absolute inset-0 bg-gradient-to-b from-gray-950 via-transparent to-gray-950" />
+      </section>
 
-        <div className="relative z-10 max-w-3xl mx-auto text-center">
+      {/* ── Stock Ticker Marquee 2 ────────────────────────── */}
+      <section className="py-6 section-gray">
+        <div className="marquee-container">
+          <div className="marquee-track animate-marquee-slow">
+            {[...POPULAR_STOCKS, ...POPULAR_STOCKS].map((stock, i) => (
+              <div key={i} className="flex-shrink-0 bg-white border border-gray-100 rounded-xl px-4 py-2.5 flex items-center gap-3 hover:shadow-sm transition-shadow">
+                <span className="font-bold text-sm text-brand-700">{stock.ticker}</span>
+                <span className="text-xs text-gray-400">{stock.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Step 2: AI-Powered Intelligence ───────────────── */}
+      <section className="py-24 px-6 section-light">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div className="order-2 lg:order-1">
+              <div className="card-light-elevated p-6 lg:p-8">
+                <AIPreview />
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <span className="step-badge">AI-Powered</span>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mt-6 mb-4">
+                Five specialized AI agents working for you
+              </h2>
+              <p className="text-gray-500 mb-8 leading-relaxed">
+                Our multi-agent pipeline runs five specialized AI agents in parallel —
+                each expert in their domain — to deliver a complete investment thesis.
+              </p>
+              <div className="space-y-4 mb-8">
+                <FeatureListItem title="Data Gathering Agent" description="Pulls real-time financials, historical prices, and company profiles from institutional sources." />
+                <FeatureListItem title="Financial Metrics Agent" description="Calculates 30+ ratios across valuation, profitability, liquidity, leverage, and growth." />
+                <FeatureListItem title="Technical Analysis Agent" description="RSI, MACD, Bollinger Bands, moving averages, support/resistance, and momentum signals." />
+                <FeatureListItem title="Risk & Sentiment Agents" description="VaR, Sharpe ratio, beta calculations combined with NLP news sentiment analysis." />
+              </div>
+              <Link href="/register" className="btn-primary inline-block">
+                Start Analyzing
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Step 3: Reports & Portfolio ───────────────────── */}
+      <section className="py-24 px-6 section-gray">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <span className="step-badge">Reports & Insights</span>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mt-6 mb-4">
+              Professional reports with interactive charts
+            </h2>
+            <p className="text-gray-500 text-lg max-w-2xl mx-auto">
+              Every analysis produces a comprehensive report with data visualizations,
+              price charts, risk dashboards, and a clear investment recommendation.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            <ReportFeatureCard
+              title="Price & Technical Charts"
+              description="Interactive price history with moving averages, Bollinger Bands, RSI gauge, and volume analysis."
+              metric="12 indicators"
+            />
+            <ReportFeatureCard
+              title="Financial Dashboard"
+              description="Profitability bars, valuation multiples, growth metrics, and DCF vs. current price comparison."
+              metric="30+ metrics"
+            />
+            <ReportFeatureCard
+              title="Risk & Sentiment"
+              description="Risk rating, Sharpe/Sortino ratios, VaR, max drawdown, and news sentiment donut chart."
+              metric="8 risk metrics"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Categories Marquee ────────────────────────────── */}
+      <section className="py-6 section-light">
+        <div className="marquee-container">
+          <div className="marquee-track animate-marquee">
+            {[...CATEGORIES, ...CATEGORIES, ...CATEGORIES].map((cat, i) => (
+              <span key={i} className="flex-shrink-0 bg-gray-50 border border-gray-200 text-gray-600 text-sm font-medium px-5 py-2.5 rounded-full hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 transition-colors cursor-pointer">
+                {cat}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── More Features ─────────────────────────────────── */}
+      <section className="py-24 px-6 section-light">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-16">
+            More Features
+          </h2>
+
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* Watchlist */}
+            <div className="card-light p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">Watchlist</h3>
+              </div>
+              <p className="text-gray-500 mb-4">
+                Save stocks to your watchlist to observe and track them over time.
+                Get quick access to analyze any company in your list.
+              </p>
+              <div className="space-y-2">
+                <SmallFeature text="Track favorite stocks" />
+                <SmallFeature text="Quick access to analysis" />
+                <SmallFeature text="Custom notes per stock" />
+              </div>
+            </div>
+
+            {/* Analysis History */}
+            <div className="card-light p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">Analysis History</h3>
+              </div>
+              <p className="text-gray-500 mb-4">
+                All your previous analyses are saved and accessible.
+                Compare reports over time to track how your thesis evolves.
+              </p>
+              <div className="space-y-2">
+                <SmallFeature text="Full report archive" />
+                <SmallFeature text="Compare analyses over time" />
+                <SmallFeature text="Export capabilities" />
+              </div>
+            </div>
+
+            {/* Premium Features */}
+            <div className="card-light p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">Secure & Private</h3>
+              </div>
+              <p className="text-gray-500 mb-4">
+                Your data stays private. JWT authentication, encrypted connections,
+                and security headers protect every interaction.
+              </p>
+              <div className="space-y-2">
+                <SmallFeature text="End-to-end encryption" />
+                <SmallFeature text="JWT authentication" />
+                <SmallFeature text="Security headers on every response" />
+              </div>
+            </div>
+
+            {/* Dashboard */}
+            <div className="card-light p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold">Dashboard</h3>
+              </div>
+              <p className="text-gray-500 mb-4">
+                A clean command center for all your analyses. Start new ones,
+                track progress in real-time, and access reports instantly.
+              </p>
+              <div className="space-y-2">
+                <SmallFeature text="Real-time job tracking" />
+                <SmallFeature text="One-click report access" />
+                <SmallFeature text="Subscription management" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA Section ───────────────────────────────────── */}
+      <section className="py-24 px-6 bg-gray-900 text-white">
+        <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">
-            Ready to analyze?
+            Ready to start investing smarter?
           </h2>
           <p className="text-gray-400 text-lg mb-10 leading-relaxed">
             Enter any ticker. Get a comprehensive, AI-powered analysis report
             in under a minute. No credit card required.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register" className="btn-primary">
+            <Link href="/register" className="bg-white text-gray-900 font-semibold px-8 py-3.5 rounded-xl hover:bg-gray-100 transition-all shadow-lg shadow-white/10">
               Create Free Account
             </Link>
-            <Link href="/pricing" className="btn-secondary">
+            <Link href="/pricing" className="btn-outline-white">
               View Plans
             </Link>
           </div>
         </div>
       </section>
 
-      {/* ── Footer ─────────────────────────────────────────── */}
-      <footer className="border-t border-white/5 py-12 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md bg-white/10 flex items-center justify-center">
-              <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
+      {/* ── Footer ────────────────────────────────────────── */}
+      <footer className="border-t border-gray-100 py-12 px-6 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-8 mb-8">
+            <div>
+              <Link href="/" className="flex items-center gap-2.5 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <span className="text-lg font-bold tracking-tight">StockAnalyzer</span>
+              </Link>
+              <p className="text-sm text-gray-400 max-w-xs">
+                AI-powered fundamental stock analysis for smarter investment decisions.
+              </p>
             </div>
-            <span className="text-sm font-medium text-gray-400">StockAnalyzer AI</span>
+            <div className="flex gap-12">
+              <div>
+                <h4 className="font-semibold text-sm mb-3">Product</h4>
+                <div className="flex flex-col gap-2">
+                  <Link href="/register" className="text-sm text-gray-400 hover:text-gray-700 transition">Stock Analysis</Link>
+                  <Link href="/pricing" className="text-sm text-gray-400 hover:text-gray-700 transition">Pricing</Link>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-semibold text-sm mb-3">Account</h4>
+                <div className="flex flex-col gap-2">
+                  <Link href="/login" className="text-sm text-gray-400 hover:text-gray-700 transition">Log In</Link>
+                  <Link href="/register" className="text-sm text-gray-400 hover:text-gray-700 transition">Sign Up</Link>
+                  <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-700 transition">Dashboard</Link>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <Link href="/pricing" className="hover:text-gray-300 transition">Pricing</Link>
-            <Link href="/login" className="hover:text-gray-300 transition">Login</Link>
-            <Link href="/register" className="hover:text-gray-300 transition">Sign Up</Link>
+          <div className="border-t border-gray-100 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <p className="text-xs text-gray-400">
+              &copy; {new Date().getFullYear()} StockAnalyzer AI. All rights reserved.
+            </p>
+            <p className="text-xs text-gray-400">
+              Financial data provided for educational purposes only. Not investment advice.
+            </p>
           </div>
-          <p className="text-xs text-gray-600">
-            &copy; {new Date().getFullYear()} StockAnalyzer AI
-          </p>
         </div>
       </footer>
     </div>
   );
 }
 
-/* ── Metric Card Component ─────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   Sub-Components
+   ══════════════════════════════════════════════════════════════ */
 
-function MetricCard({
-  number,
-  label,
-  detail,
-  color,
-}: {
-  number: string;
-  label: string;
-  detail: string;
-  color: 'blue' | 'cyan' | 'amber' | 'emerald';
-}) {
-  const colors = {
-    blue: 'text-blue-400',
-    cyan: 'text-cyan-400',
-    amber: 'text-amber-400',
-    emerald: 'text-emerald-400',
-  };
-
+function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className="glass-card p-6 hover:border-white/20 transition-all duration-500">
-      <p className={`text-4xl font-bold ${colors[color]} mb-1`}>{number}</p>
-      <p className="font-semibold text-white mb-2">{label}</p>
-      <p className="text-gray-500 text-sm leading-relaxed">{detail}</p>
+    <div className="card-light p-7 group hover:border-brand-100">
+      <div className="w-12 h-12 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform">
+        {icon}
+      </div>
+      <h3 className="text-lg font-bold mb-2">{title}</h3>
+      <p className="text-gray-500 text-sm leading-relaxed">{description}</p>
     </div>
+  );
+}
+
+function FeatureListItem({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center mt-0.5">
+        <svg className="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <div>
+        <h4 className="font-semibold text-sm">{title}</h4>
+        <p className="text-gray-500 text-sm">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function SmallFeature({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <svg className="w-4 h-4 text-brand-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+      <span className="text-sm text-gray-600">{text}</span>
+    </div>
+  );
+}
+
+function ReportFeatureCard({ title, description, metric }: { title: string; description: string; metric: string }) {
+  return (
+    <div className="card-light p-7">
+      <div className="inline-block bg-brand-50 text-brand-700 text-xs font-bold px-3 py-1 rounded-full mb-4">
+        {metric}
+      </div>
+      <h3 className="text-lg font-bold mb-2">{title}</h3>
+      <p className="text-gray-500 text-sm leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
+/* ── Analysis Preview Mock ────────────────────────────────── */
+function AnalysisPreview() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-brand-100 flex items-center justify-center text-brand-700 font-bold">A</div>
+          <div>
+            <p className="font-bold">Apple Inc</p>
+            <p className="text-xs text-gray-400">AAPL · NASDAQ</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="font-bold text-lg">$189.84</p>
+          <p className="text-xs text-emerald-600 font-semibold">+1.24%</p>
+        </div>
+      </div>
+      <div className="border-t border-gray-100 pt-4 grid grid-cols-3 gap-4">
+        <div><p className="text-[10px] uppercase text-gray-400 font-medium">P/E Ratio</p><p className="font-bold text-sm">29.8</p></div>
+        <div><p className="text-[10px] uppercase text-gray-400 font-medium">ROE</p><p className="font-bold text-sm">147.3%</p></div>
+        <div><p className="text-[10px] uppercase text-gray-400 font-medium">DCF Value</p><p className="font-bold text-sm text-emerald-600">$201.20</p></div>
+      </div>
+      <div className="border-t border-gray-100 pt-4 grid grid-cols-3 gap-4">
+        <div><p className="text-[10px] uppercase text-gray-400 font-medium">Revenue Growth</p><p className="font-bold text-sm">+8.2%</p></div>
+        <div><p className="text-[10px] uppercase text-gray-400 font-medium">Net Margin</p><p className="font-bold text-sm">25.3%</p></div>
+        <div><p className="text-[10px] uppercase text-gray-400 font-medium">RSI</p><p className="font-bold text-sm text-amber-600">58.4</p></div>
+      </div>
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+          <span className="text-sm font-semibold text-emerald-800">Recommendation: BUY</span>
+        </div>
+        <span className="text-xs font-medium text-emerald-600">Confidence: 78%</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── AI Preview Mock ──────────────────────────────────────── */
+function AIPreview() {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Multi-Agent Pipeline</p>
+      {[
+        { name: 'Data Gathering', status: 'complete', color: 'emerald' },
+        { name: 'Financial Metrics', status: 'complete', color: 'emerald' },
+        { name: 'Technical Analysis', status: 'complete', color: 'emerald' },
+        { name: 'Risk Assessment', status: 'complete', color: 'emerald' },
+        { name: 'News Sentiment', status: 'complete', color: 'emerald' },
+        { name: 'Synthesis Report', status: 'generating', color: 'blue' },
+      ].map((agent) => (
+        <div key={agent.name} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full ${agent.color === 'emerald' ? 'bg-emerald-500' : 'bg-blue-500 animate-pulse'}`} />
+            <span className="text-sm font-medium">{agent.name}</span>
+          </div>
+          <span className={`text-xs font-semibold ${agent.color === 'emerald' ? 'text-emerald-600' : 'text-blue-600'}`}>
+            {agent.status === 'complete' ? 'Complete' : 'Generating...'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Icon Components ──────────────────────────────────────── */
+
+function ChartIcon() {
+  return (
+    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+    </svg>
+  );
+}
+
+function AnalyticsIcon() {
+  return (
+    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" />
+    </svg>
+  );
+}
+
+function TechnicalIcon() {
+  return (
+    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+    </svg>
+  );
+}
+
+function ValuationIcon() {
+  return (
+    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+    </svg>
+  );
+}
+
+function SentimentIcon() {
+  return (
+    <svg className="w-6 h-6 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z" />
+    </svg>
   );
 }

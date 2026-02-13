@@ -135,23 +135,32 @@ export default function DashboardPage() {
 
   if (isLoading || !isAuthenticated || !user) {
     return (
-      <div className="bg-gray-900 text-white min-h-screen flex items-center justify-center">
+      <div className="bg-gray-950 text-white min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-gray-400">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+    <div className="bg-gray-950 text-white min-h-screen p-4 md:p-8">
       {/* Header */}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-gray-400">Welcome back, {user.email}</p>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-gray-400">Welcome back, {user.email}</p>
+          </div>
         </div>
         <button
           onClick={logout}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition duration-300 text-sm"
+          className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition duration-300 text-sm border border-gray-700"
         >
           Log Out
         </button>
@@ -159,7 +168,7 @@ export default function DashboardPage() {
 
       {/* Upgrade Banner */}
       {user.subscription_status !== 'active' && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-lg mb-8 text-center">
+        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-xl mb-8 text-center">
           You are on the free plan ({jobs.length}/{FREE_ANALYSIS_LIMIT} analyses used).{' '}
           <Link href="/pricing" className="font-bold underline ml-1">
             Upgrade to Premium
@@ -168,7 +177,7 @@ export default function DashboardPage() {
       )}
 
       {/* New Analysis */}
-      <div className="bg-gray-800 p-6 rounded-lg mb-8">
+      <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl mb-8">
         <h2 className="text-xl font-semibold mb-4">New Analysis</h2>
         <form onSubmit={handleAnalysis}>
           <div className="flex gap-4">
@@ -178,13 +187,13 @@ export default function DashboardPage() {
               onChange={(e) => setTicker(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
               placeholder="e.g., AAPL"
               maxLength={5}
-              className="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition"
+              className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500 transition text-white"
               required
               disabled={isAnalyzing}
             />
             <button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition duration-300"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-bold py-2 px-6 rounded-xl transition duration-300"
               disabled={isAnalyzing || !canRunAnalysis}
             >
               {isAnalyzing ? 'Analyzing...' : 'Analyze'}
@@ -204,13 +213,13 @@ export default function DashboardPage() {
 
       {/* Past Jobs */}
       {jobs.length > 0 && (
-        <div className="bg-gray-800 p-6 rounded-lg">
+        <div className="bg-gray-900 border border-gray-800 p-6 rounded-xl">
           <h2 className="text-xl font-semibold mb-4">Analysis History</h2>
           <div className="space-y-3">
             {jobs.map((job) => (
               <div
                 key={job.id}
-                className="flex items-center justify-between bg-gray-700/50 p-4 rounded-lg"
+                className="flex items-center justify-between bg-gray-800/50 border border-gray-800 p-4 rounded-xl"
               >
                 <div className="flex items-center gap-4">
                   <span className="font-mono font-bold text-lg">{job.ticker}</span>
