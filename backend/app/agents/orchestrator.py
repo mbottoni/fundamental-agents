@@ -192,8 +192,15 @@ class Orchestrator:
                 risk=risk,
             )
 
-            # ── Step 4: Save & finalize ──────────────────────
-            report = crud.create_report(db, content=report_content, job_id=job.id)
+            # ── Step 4: Build structured chart data ──────────
+            chart_data = self._build_chart_data(
+                raw_data, metrics, technical, risk, sentiment, valuation,
+            )
+
+            # ── Step 5: Save & finalize ──────────────────────
+            report = crud.create_report(
+                db, content=report_content, job_id=job.id, chart_data=chart_data,
+            )
             crud.update_job_status(db, job_id=job.id, status="complete")
 
             logger.info(
