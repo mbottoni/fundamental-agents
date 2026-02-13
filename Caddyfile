@@ -1,0 +1,26 @@
+# ── Caddy Reverse Proxy Configuration ────────────────────────
+# Replace yourdomain.com with your actual domain.
+# Caddy automatically provisions TLS certificates via Let's Encrypt.
+
+yourdomain.com {
+    # Frontend
+    reverse_proxy frontend:3000
+
+    # Security headers (Caddy adds most by default)
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
+api.yourdomain.com {
+    # Backend API
+    reverse_proxy backend:8000
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+    }
+}

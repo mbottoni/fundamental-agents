@@ -1,4 +1,6 @@
 import logging
+from typing import Optional
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
@@ -10,6 +12,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # --- Database ---
     DATABASE_URL: str
@@ -30,13 +33,28 @@ class Settings(BaseSettings):
     # Comma-separated list of emails that always get premium features.
     PREMIUM_EMAILS: str = "maruanbakriottoni@gmail.com"
 
+    # --- Rate Limiting ---
+    RATE_LIMIT_PER_MINUTE: int = 30
+    FREE_TIER_DAILY_ANALYSES: int = 3
+
+    # --- Email (optional - logs tokens to console when unset) ---
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAILS_FROM_NAME: str = "StockAnalyzer AI"
+    EMAILS_FROM_ADDRESS: str = "noreply@stockanalyzer.ai"
+
+    # --- Monitoring (optional) ---
+    SENTRY_DSN: str = ""
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_be_strong(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError(
                 "SECRET_KEY must be at least 32 characters. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
             )
         return v
 

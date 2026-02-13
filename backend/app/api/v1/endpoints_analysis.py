@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app import crud, models, schemas
 from app.agents.orchestrator import Orchestrator
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.db import get_db, get_standalone_session
 
 logger = logging.getLogger("stock_analyzer.api.analysis")
@@ -48,8 +49,20 @@ def start_analysis(
 ):
     """
     Start a new stock analysis job for the given ticker.
-    The analysis runs in the background and can be polled for status.
+    Free-tier users are limited to a configurable daily cap.
     """
+    # Enforce free-tier daily limit
+    if current_user.subscription_status != "active":
+        today_count = crud.count_user_analyses_today(db, current_user.id)
+        if today_count >= settings.FREE_TIER_DAILY_ANALYSES:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Free plan limit reached ({settings.FREE_TIER_DAILY_ANALYSES} analyses/day). "
+                    "Upgrade to Premium for unlimited analyses."
+                ),
+            )
+
     job = crud.create_analysis_job(db=db, job=request, user_id=current_user.id)
     background_tasks.add_task(run_analysis_background, job.id, request.ticker)
     logger.info("Analysis job %d queued for %s by user %d", job.id, request.ticker, current_user.id)
