@@ -90,6 +90,89 @@ export interface SearchResult {
   stockExchange: string;
 }
 
+// --- Chart Data (structured data for visualizations) ---
+
+export interface PricePoint {
+  date: string;
+  close: number;
+  volume: number;
+  sma_20?: number | null;
+  sma_50?: number | null;
+  sma_200?: number | null;
+  bb_upper?: number | null;
+  bb_lower?: number | null;
+}
+
+export interface BarDataPoint {
+  name: string;
+  value: number;
+}
+
+export interface SentimentSlice {
+  name: string;
+  value: number;
+  color?: string;
+}
+
+export interface ChartData {
+  ticker: string;
+  company_name: string;
+  current_price: number | null;
+  price_series: PricePoint[];
+  moving_averages: {
+    sma_20: number | null;
+    sma_50: number | null;
+    sma_200: number | null;
+  };
+  bollinger_bands: {
+    upper: number | null;
+    lower: number | null;
+    middle: number | null;
+  };
+  rsi: number | null;
+  macd: {
+    macd_line: number | null;
+    signal_line: number | null;
+    histogram: number | null;
+  };
+  atr: number | null;
+  volume_profile: {
+    avg_volume: number | null;
+    relative_volume: number | null;
+  };
+  momentum: {
+    price_momentum_1m: number | null;
+    price_momentum_3m: number | null;
+    price_momentum_6m: number | null;
+  };
+  trend_signals: string[];
+  support_resistance: {
+    support: number | null;
+    resistance: number | null;
+  };
+  profitability: BarDataPoint[];
+  valuation_multiples: BarDataPoint[];
+  sentiment: SentimentSlice[];
+  sentiment_score: number;
+  growth: BarDataPoint[];
+  risk: {
+    rating: string;
+    annual_volatility: number | null;
+    sharpe_ratio: number | null;
+    sortino_ratio: number | null;
+    max_drawdown_pct: number | null;
+    beta: number | null;
+    var_95: number | null;
+  };
+  dcf: {
+    intrinsic_value: number | null;
+    wacc: number | null;
+    current_price: number | null;
+  };
+  liquidity: Record<string, number | null>;
+  leverage: Record<string, number | null>;
+}
+
 // --- API Errors ---
 export interface ApiError {
   detail: string;
