@@ -1,4 +1,5 @@
 import logging
+from datetime import date, timedelta
 from typing import Any, Optional
 
 import httpx
@@ -17,6 +18,12 @@ class DataGatheringAgent:
     # FMP migrated from /api/v3 (legacy) to /stable endpoints in Aug 2025.
     # The new API uses query parameters (?symbol=X) instead of path params (/X).
     FMP_BASE_URL = "https://financialmodelingprep.com/stable"
+
+    # Three years covers the longest window any agent needs (200-day SMA,
+    # 52-week range, 1-year risk statistics) without pulling decades of bars.
+    PRICE_HISTORY_YEARS = 3
+    # Market proxy used to regress beta.
+    BENCHMARK_TICKER = "SPY"
 
     def __init__(self) -> None:
         self.fmp_api_key = settings.FINANCIAL_MODELING_PREP_API_KEY
@@ -48,11 +55,30 @@ class DataGatheringAgent:
             "cash_flow": self._fmp_get("cash-flow-statement", params) or [],
         }
 
+    def _price_window(self) -> dict[str, str]:
+        """Date range parameters for the price history request."""
+        today = date.today()
+        start = today - timedelta(days=365 * self.PRICE_HISTORY_YEARS)
+        return {"from": start.isoformat(), "to": today.isoformat()}
+
     def get_stock_price_history(self, ticker: str) -> list[dict]:
-        """Fetch historical daily stock prices."""
+        """Fetch historical daily stock prices over the analysis window."""
         logger.info("Fetching price history for %s", ticker)
         # The /stable API returns a flat list of price records directly.
-        data = self._fmp_get("historical-price-eod/full", {"symbol": ticker})
+        data = self._fmp_get(
+            "historical-price-eod/full", {"symbol": ticker, **self._price_window()},
+        )
+        if data and isinstance(data, list):
+            return data
+        return []
+
+    def get_benchmark_prices(self) -> list[dict]:
+        """Fetch price history for the market benchmark, used to regress beta."""
+        logger.info("Fetching benchmark price history (%s)", self.BENCHMARK_TICKER)
+        data = self._fmp_get(
+            "historical-price-eod/full",
+            {"symbol": self.BENCHMARK_TICKER, **self._price_window()},
+        )
         if data and isinstance(data, list):
             return data
         return []
@@ -98,16 +124,18 @@ class DataGatheringAgent:
 
         financials = self.get_financial_statements(ticker)
         prices = self.get_stock_price_history(ticker)
+        benchmark_prices = self.get_benchmark_prices()
         profile = self.get_company_profile(ticker)
         news = self.get_news(ticker)
         revenue_segments = self.get_revenue_segments(ticker)
         dividend_history = self.get_dividend_history(ticker)
 
         logger.info(
-            "Data gathering complete for %s: profile=%s, prices=%d, news=%d, divs=%d",
+            "Data gathering complete for %s: profile=%s, prices=%d, benchmark=%d, news=%d, divs=%d",
             ticker,
             "found" if profile else "missing",
             len(prices),
+            len(benchmark_prices),
             len(news),
             len(dividend_history),
         )
@@ -116,6 +144,7 @@ class DataGatheringAgent:
             "ticker": ticker,
             "financials": financials,
             "prices": prices,
+            "benchmark_prices": benchmark_prices,
             "profile": profile,
             "news": news,
             "revenue_segments": revenue_segments,

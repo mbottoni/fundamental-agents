@@ -402,11 +402,21 @@ class SynthesisReportingAgent:
         rating = risk.get("risk_rating", "unknown")
         lines.append(f"**Overall Risk Rating: {rating.replace('_', ' ').upper()}**")
 
+        # State the measurement window — these statistics are meaningless
+        # without knowing how much history they cover.
+        if risk.get("window_start") and risk.get("window_end"):
+            lines.append(
+                f"*Measured over {risk.get('observations', 0)} trading sessions "
+                f"({risk['window_start']} → {risk['window_end']}).*"
+            )
+
         lines.append("")
         lines.append("### Volatility")
         lines.append(f"- **Annual Volatility:** {self._fp(risk.get('annual_volatility'))}")
         lines.append(f"- **Daily Volatility:** {self._fp(risk.get('daily_volatility'))}")
-        lines.append(f"- **Beta:** {self._fr(risk.get('beta'), 3)}")
+        beta_source = risk.get("beta_source")
+        beta_suffix = f" ({beta_source})" if beta_source and beta_source != "unavailable" else ""
+        lines.append(f"- **Beta:** {self._fr(risk.get('beta'), 3)}{beta_suffix}")
 
         lines.append("")
         lines.append("### Drawdown")
@@ -414,9 +424,10 @@ class SynthesisReportingAgent:
 
         lines.append("")
         lines.append("### Risk‑Adjusted Returns")
+        lines.append(f"- **Annualized Return:** {self._fp(risk.get('annualized_return'))}")
         lines.append(f"- **Sharpe Ratio:** {self._fr(risk.get('sharpe_ratio'), 3)}")
         lines.append(f"- **Sortino Ratio:** {self._fr(risk.get('sortino_ratio'), 3)}")
-        lines.append(f"- **Risk‑Adjusted Return:** {self._fr(risk.get('risk_adjusted_return'), 3)}")
+        lines.append(f"- **Return / Volatility:** {self._fr(risk.get('risk_adjusted_return'), 3)}")
 
         lines.append("")
         lines.append("### Value at Risk (Daily, 95% Confidence)")

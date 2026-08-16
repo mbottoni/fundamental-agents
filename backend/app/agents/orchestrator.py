@@ -146,6 +146,9 @@ class Orchestrator:
                 "max_drawdown_pct": risk.get("max_drawdown_pct"),
                 "beta": risk.get("beta"),
                 "var_95": risk.get("var_historical_95"),
+                "annualized_return": risk.get("annualized_return"),
+                "window_start": risk.get("window_start"),
+                "window_end": risk.get("window_end"),
             },
             "dcf": {
                 "intrinsic_value": valuation.get("dcf_intrinsic_value_per_share"),
