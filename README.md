@@ -80,8 +80,12 @@ agents_invest/
 │   │   │   ├── orchestrator.py
 │   │   │   ├── data_gathering_agent.py
 │   │   │   ├── financial_metrics_agent.py
+│   │   │   ├── technical_analysis_agent.py
+│   │   │   ├── risk_assessment_agent.py
 │   │   │   ├── news_sentiment_agent.py
 │   │   │   ├── valuation_agent.py
+│   │   │   ├── peer_comparison_agent.py
+│   │   │   ├── recommendation.py
 │   │   │   └── synthesis_reporting_agent.py
 │   │   ├── api/                 # REST API layer
 │   │   │   ├── deps.py          # Auth dependencies
