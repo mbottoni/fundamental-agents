@@ -253,4 +253,5 @@ dist/
 .pnp.*
 
 # Local test artifacts
+test.db
 backend/test.db

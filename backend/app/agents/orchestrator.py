@@ -257,7 +257,11 @@ class Orchestrator:
             metrics = self.metrics_agent.run(raw_data)
             technical = self.technical_agent.run(raw_data)
             risk = self.risk_agent.run(raw_data)
-            sentiment = self.sentiment_agent.run(raw_data.get("news", []))
+            sentiment = self.sentiment_agent.run(
+                raw_data.get("news", []),
+                ticker=self.ticker,
+                company_name=(raw_data.get("profile") or {}).get("companyName"),
+            )
             valuation = self.valuation_agent.run(raw_data)
 
             # ── Step 3: Score the investment case ────────────

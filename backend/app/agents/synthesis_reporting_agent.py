@@ -412,7 +412,7 @@ class SynthesisReportingAgent:
     def _section_sentiment(self, sentiment: dict) -> str:
         lines = ["## Market Sentiment", ""]
 
-        avg = sentiment.get("average_sentiment_compound", 0)
+        avg = sentiment.get("average_sentiment_compound") or 0
         analyzed = sentiment.get("analyzed_articles_count", 0)
         positive = sentiment.get("positive_articles_count", 0)
         negative = sentiment.get("negative_articles_count", 0)
@@ -426,9 +426,22 @@ class SynthesisReportingAgent:
             mood = "Neutral"
 
         lines.append(f"- **Overall Mood:** {mood}")
-        lines.append(f"- **Compound Score:** {self._fr(avg)}")
+        lines.append(f"- **Compound Score:** {self._fr(avg)} (recency‑weighted)")
         lines.append(f"- **Articles Analyzed:** {analyzed}")
         lines.append(f"- **Breakdown:** {positive} positive, {negative} negative, {neutral} neutral")
+
+        excluded = (sentiment.get("excluded_irrelevant_count") or 0) + (
+            sentiment.get("excluded_stale_count") or 0
+        )
+        if excluded:
+            lines.append(f"- **Excluded:** {excluded} article(s) as off‑topic or stale")
+
+        if sentiment.get("most_positive_headline"):
+            lines.append(f"- **Most Positive:** *{sentiment['most_positive_headline']}*")
+        if sentiment.get("most_negative_headline"):
+            lines.append(f"- **Most Negative:** *{sentiment['most_negative_headline']}*")
+        if sentiment.get("note"):
+            lines.append(f"\n*{sentiment['note']}*")
 
         return "\n".join(lines)
 
