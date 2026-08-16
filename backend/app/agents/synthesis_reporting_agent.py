@@ -176,19 +176,81 @@ class SynthesisReportingAgent:
 
         return "\n".join(lines)
 
+    def _sensitivity_table(self, sensitivity: dict) -> list[str]:
+        """Render the WACC × terminal-growth grid as a markdown table."""
+        wacc_values = sensitivity.get("wacc_values") or []
+        growth_values = sensitivity.get("terminal_growth_values") or []
+        grid = sensitivity.get("grid") or []
+        if not wacc_values or not growth_values or not grid:
+            return []
+
+        header = " | ".join(f"g = {g * 100:.1f}%" for g in growth_values)
+        lines = [
+            "",
+            "#### Sensitivity — Value per Share",
+            "",
+            f"| WACC | {header} |",
+            "|" + "---|" * (len(growth_values) + 1),
+        ]
+        for wacc, row in zip(wacc_values, grid):
+            cells = " | ".join(self._fc(v) if v is not None else "n/a" for v in row)
+            lines.append(f"| **{wacc * 100:.1f}%** | {cells} |")
+        return lines
+
     def _section_valuation(self, valuation: dict, metrics: dict) -> str:
         lines = ["## Valuation Analysis", ""]
 
         dcf = valuation.get("dcf_intrinsic_value_per_share")
         wacc = valuation.get("wacc")
         lines.append("### DCF Model")
+        if valuation.get("method"):
+            lines.append(f"- **Method:** {valuation['method']}")
         lines.append(f"- **Intrinsic Value (DCF):** {self._fc(dcf)}")
+
+        sensitivity = valuation.get("sensitivity") or {}
+        if sensitivity.get("low") is not None and sensitivity.get("high") is not None:
+            lines.append(
+                f"- **Range Across Assumptions:** {self._fc(sensitivity['low'])} – "
+                f"{self._fc(sensitivity['high'])}"
+            )
         if wacc:
-            lines.append(f"- **WACC:** {self._fp(wacc)}")
+            lines.append(f"- **WACC (discount rate):** {self._fp(wacc)}")
+        if valuation.get("terminal_growth_rate") is not None:
+            lines.append(f"- **Terminal Growth:** {self._fp(valuation['terminal_growth_rate'])}")
+        if valuation.get("fcf_growth_rate") is not None:
+            basis = valuation.get("fcf_growth_basis")
+            suffix = f" (from {basis})" if basis else ""
+            lines.append(f"- **Projected FCF Growth:** {self._fp(valuation['fcf_growth_rate'])}{suffix}")
         if valuation.get("latest_fcf"):
             lines.append(f"- **Latest Free Cash Flow:** {self._fc(valuation['latest_fcf'])}")
+        if valuation.get("latest_fcff"):
+            lines.append(
+                f"- **Latest Unlevered FCF (FCFF):** {self._fc(valuation['latest_fcff'])}"
+            )
+        if valuation.get("terminal_value_share") is not None:
+            lines.append(
+                f"- **Terminal Value Share:** {self._fp(valuation['terminal_value_share'])} "
+                "of enterprise value"
+            )
+
+        # Enterprise → equity bridge, so the reader can see where the
+        # per-share number actually comes from.
+        if valuation.get("enterprise_value") is not None:
+            lines.append("")
+            lines.append("#### Enterprise → Equity Bridge")
+            lines.append(f"- **Enterprise Value:** {self._fc(valuation['enterprise_value'])}")
+            lines.append(f"- **Less: Total Debt:** {self._fc(valuation.get('total_debt'))}")
+            lines.append(f"- **Plus: Cash & Equivalents:** {self._fc(valuation.get('cash'))}")
+            lines.append(f"- **Equity Value:** {self._fc(valuation.get('equity_value'))}")
+            lines.append(f"- **Diluted Shares:** {self._fn(valuation.get('shares_outstanding'))}")
+
+        lines.extend(self._sensitivity_table(sensitivity))
+
         if valuation.get("error"):
-            lines.append(f"- *Note: {valuation['error']}*")
+            lines.append("")
+            lines.append(f"> **DCF unavailable.** {valuation['error']}")
+        for warning in valuation.get("warnings") or []:
+            lines.append(f"> *Caveat: {warning}*")
 
         lines.append("")
         lines.append("### Relative Valuation (Multiples)")
