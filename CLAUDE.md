@@ -24,6 +24,8 @@ cd backend && pytest tests/test_auth.py::TestRegistration::test_x    # one test
 cd backend && pytest -k "free_tier"                                  # by name
 ```
 
+The agent tests (`test_valuation`, `test_risk`, `test_metrics`, `test_recommendation`, `test_sentiment`, `test_data_gathering`, `test_synthesis`) are pure and fast — no network, no database. `conftest.py` still loads the app, so they need the full dependency set installed.
+
 Frontend checks (what CI runs — `.github/workflows/deploy.yml`):
 
 ```bash
@@ -51,19 +53,24 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 
 `backend/app/agents/orchestrator.py` is the spine. Each agent is a stateless class with a single `run()` that takes and returns plain dicts; they never touch the DB:
 
-1. `DataGatheringAgent` — FMP statements/prices/profile/segments/dividends + NewsAPI articles → `raw_data`
-2. `FinancialMetricsAgent` — ~30 ratios, nested under `metrics["groups"][...]`
+1. `DataGatheringAgent` — FMP statements/prices/TTM ratios/profile/segments/dividends + a benchmark series + NewsAPI articles → `raw_data`. The eleven requests are fanned out across a thread pool, retried with backoff on 429/5xx, and cached in-process per endpoint (`TTLCache`). The profile is fetched first because the news query needs the company name.
+2. `FinancialMetricsAgent` — ~30 ratios nested under `metrics["groups"][...]`, computed from annual statements then overlaid with TTM figures where FMP supplies them (`metrics["ttm_metrics"]` lists which)
 3. `TechnicalAnalysisAgent` — RSI, MACD, MAs, Bollinger, momentum
-4. `RiskAssessmentAgent` — volatility, Sharpe/Sortino, VaR, drawdown, beta
-5. `NewsSentimentAgent` — NLTK VADER over the articles
-6. `ValuationAgent` — DCF (WACC, projected FCF, terminal value)
-7. `SynthesisReportingAgent` — assembles the markdown report and the buy/hold/sell recommendation
+4. `RiskAssessmentAgent` — volatility, Sharpe/Sortino, VaR, drawdown over a trailing 252-session window, plus beta regressed against SPY
+5. `NewsSentimentAgent` — VADER with a finance lexicon, relevance filtering, and recency weighting
+6. `ValuationAgent` — two-stage FCFF DCF: discount unlevered FCF at WACC, then bridge to equity via `EV − debt + cash`. Returns a sensitivity grid, not just a point estimate
+7. `RecommendationEngine` (`recommendation.py`) — scores six weighted factors into the buy/hold/sell call; run by the orchestrator, not by an agent
+8. `SynthesisReportingAgent` — renders the markdown report from all of the above
 
-The orchestrator writes job status at each stage (`pending → gathering_data → analyzing → generating_report → complete | failed`); the frontend dashboard polls `GET /api/v1/analysis/{id}` every 4s. Any exception is swallowed and the job is marked `failed` — check backend logs, not the API response, when a pipeline breaks.
+**Where to be careful:** the DCF must keep its equity bridge and its guard rails (negative FCF, the WACC-vs-terminal-growth spread, negative equity value) — each exists because removing it produces confident nonsense. The recommendation is capped by the valuation factor so quality and growth cannot outvote price entirely.
+
+The orchestrator writes job status at each stage (`pending → gathering_data → analyzing → generating_report → complete | failed`); the frontend dashboard polls `GET /api/v1/analysis/{id}` every 4s. Exceptions are caught and turned into a user-facing `error_message` on the job via `Orchestrator._failure_message`; raise `DataUnavailableError` with an explanatory message for anything the user could act on. Jobs left mid-flight by a restart are failed at startup by `_reap_interrupted_jobs`.
 
 **Two outputs per job:** the markdown `Report.content`, and `Report.chart_data`, a JSON **string** built by `Orchestrator._build_chart_data()`. That dict is the contract for the report page's Recharts components — its shape must stay in sync with `ChartData` in `frontend/src/types/index.ts`. It is serialized in `crud.create_report` and deserialized by a `field_validator` on `schemas.Report`.
 
-When adding an agent: write the class with `run()`, instantiate it in `Orchestrator.__init__`, call it in `run_analysis`, and thread its output into both `_build_chart_data` and `SynthesisReportingAgent.run`.
+When adding an agent: write the class with `run()`, instantiate it in `Orchestrator.__init__`, call it in `run_analysis`, and thread its output into both `_build_chart_data` and `SynthesisReportingAgent.run`. If it produces something the recommendation should weigh, add a factor in `recommendation.py` rather than special-casing it in the report.
+
+**Verifying against the live API:** unit tests stub all HTTP, so FMP field names and endpoint paths are only checked by running the pipeline for real. `Orchestrator(...).data_agent.run(ticker)` plus the agents, with no DB, is enough to catch a renamed field — that is how the `dividends` endpoint 404 and the zero-interest-coverage issue were found.
 
 ### API layer
 

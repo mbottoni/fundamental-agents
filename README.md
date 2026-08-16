@@ -23,23 +23,38 @@ A multi-agent AI platform for fundamental stock analysis. Input a ticker, get an
            | PostgreSQL |             | Orchestrator|
            |   :5432    |             +------+------+
            +------------+                    |
-                               +-------------+-------------+
-                               |      |      |      |      |
-                              D.G.  F.M.   N.S.   Val.   Syn.
-                            Agent  Agent  Agent  Agent  Agent
+                     +---------+----+----+----+---------+
+                     |         |    |    |    |         |
+                    D.G.     F.M.  T.A. R.A. N.S.     Val.
+                   Agent    Agent Agent Agent Agent   Agent
+                     |         |    |    |    |         |
+                     +---------+----+-+--+----+---------+
+                                      |
+                              Recommendation
+                                 Engine
+                                      |
+                                 Synthesis
+                                   Agent
 ```
 
 ### Agent Pipeline
 
-The **Orchestrator** coordinates five specialized agents in sequence:
+The **Orchestrator** coordinates specialized agents, then scores the result:
 
 | Agent | Role | Data Source |
 |-------|------|-------------|
-| **Data Gathering** | Fetches financial statements, price history, company profile, news | Financial Modeling Prep, NewsAPI |
-| **Financial Metrics** | Computes P/E, D/E, ROE, Current Ratio | Raw financial data |
-| **News Sentiment** | VADER-based sentiment analysis on recent articles | News articles |
-| **Valuation** | DCF model with WACC, projected FCF, terminal value | Financial data + profile |
-| **Synthesis** | Generates a markdown report with recommendation | All agent outputs |
+| **Data Gathering** | Financial statements, TTM ratios, price history, company profile, dividends, benchmark series, news -- fetched concurrently, retried on throttling, cached per endpoint | Financial Modeling Prep, NewsAPI |
+| **Financial Metrics** | ~30 ratios across valuation, profitability, liquidity, leverage, efficiency, growth and cash flow, on a trailing-twelve-month basis where available | Raw financial data |
+| **Technical Analysis** | RSI, MACD, moving averages, Bollinger bands, ATR, momentum, support/resistance | Price history |
+| **Risk Assessment** | Volatility, Sharpe, Sortino, VaR and drawdown over a trailing 252-session window; beta regressed against SPY | Price history + benchmark |
+| **News Sentiment** | VADER with a financial lexicon, relevance filtering and recency weighting | News articles |
+| **Valuation** | Two-stage FCFF DCF discounted at WACC, bridged to equity value, with a WACC x terminal-growth sensitivity grid | Financial data + profile |
+| **Recommendation** | Scores six weighted factors -- valuation, quality, financial health, growth, momentum, sentiment -- into a buy/hold/sell call, capped by valuation | All agent outputs |
+| **Synthesis** | Markdown report with a scorecard showing every factor's score and drivers | All agent outputs |
+
+Factors without data are dropped and their weight redistributed, so a company
+with no usable DCF is still assessed on everything else. Confidence reflects
+how much of the model had data behind it and how much the factors agree.
 
 ### Tech Stack
 
@@ -133,11 +148,21 @@ python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 |--------|------|-------------|------|
 | `POST` | `/api/v1/auth/register` | Create a new account | No |
 | `POST` | `/api/v1/auth/login` | Get access token | No |
+| `POST` | `/api/v1/auth/refresh` | Exchange a refresh token | No |
 | `GET` | `/api/v1/auth/me` | Current user profile | Yes |
+| `POST` | `/api/v1/auth/verify-email` | Confirm an email address | No |
+| `POST` | `/api/v1/auth/forgot-password` | Request a reset link | No |
+| `POST` | `/api/v1/auth/reset-password` | Set a new password | No |
 | `POST` | `/api/v1/analysis/` | Start analysis job | Yes |
 | `GET` | `/api/v1/analysis/{id}` | Poll job status | Yes |
 | `GET` | `/api/v1/analysis/` | List user's jobs | Yes |
 | `GET` | `/api/v1/reports/{id}` | Get report content | Yes |
+| `GET` | `/api/v1/dashboard/*` | Quotes, stats, search | Yes |
+| `GET`/`POST`/`PATCH`/`DELETE` | `/api/v1/watchlist/*` | Manage watchlist | Yes |
+| `GET` | `/api/v1/compare/` | Compare tickers | Yes |
+| `GET` | `/api/v1/screener/*` | Screen by criteria | Yes |
+| `GET` | `/api/v1/chart/{ticker}` | Prices + indicators | Yes |
+| `GET` | `/api/v1/market/*` | Movers, sectors, lists | Yes |
 | `POST` | `/api/v1/stripe/create-checkout-session` | Start checkout | Yes |
 | `POST` | `/api/v1/stripe/webhook` | Stripe events | No |
 | `GET` | `/health` | Health check | No |
@@ -148,6 +173,10 @@ python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 pending -> gathering_data -> analyzing -> generating_report -> complete
                                                             -> failed
 ```
+
+A failed job carries an `error_message` explaining why, and failed jobs do not
+count against the free tier's daily allowance. Jobs interrupted by a server
+restart are failed on the next startup rather than left polling forever.
 
 ## Database Schema
 
@@ -162,16 +191,18 @@ users
   updated_at          TIMESTAMP
 
 analysisjobs
-  id         INTEGER PK
-  user_id    INTEGER FK -> users.id
-  ticker     VARCHAR
-  status     VARCHAR (default: "pending")
-  created_at TIMESTAMP
-  updated_at TIMESTAMP
+  id            INTEGER PK
+  user_id       INTEGER FK -> users.id
+  ticker        VARCHAR
+  status        VARCHAR (default: "pending")
+  error_message TEXT (nullable, set when status is "failed")
+  created_at    TIMESTAMP
+  updated_at    TIMESTAMP
 
 reports
   id         INTEGER PK
   content    TEXT
+  chart_data TEXT (JSON: chart series + recommendation scorecard)
   job_id     INTEGER FK -> analysisjobs.id (UNIQUE)
   created_at TIMESTAMP
   updated_at TIMESTAMP
