@@ -98,7 +98,37 @@ def _run_auto_migrations() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT false"))
             logger.info("Migration: added is_verified column to users.")
 
+        # analysisjobs.error_message
+        job_cols = [c["name"] for c in inspector.get_columns("analysisjobs")]
+        if "error_message" not in job_cols:
+            conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN error_message TEXT"))
+            logger.info("Migration: added error_message column to analysisjobs.")
+
         conn.commit()
+
+
+def _reap_interrupted_jobs() -> None:
+    """
+    Fail jobs left running by a previous process.
+
+    Analyses run as in-process background tasks, so anything mid-flight when
+    the server stopped is gone — without this the frontend polls those jobs
+    forever.
+    """
+    from .core.db import SessionLocal
+    from .crud import fail_stale_jobs
+
+    db = SessionLocal()
+    try:
+        fail_stale_jobs(
+            db,
+            "This analysis was interrupted by a server restart and did not finish. "
+            "Please run it again.",
+        )
+    except Exception as e:
+        logger.warning("Could not reap interrupted jobs (non-fatal): %s", e)
+    finally:
+        db.close()
 
 
 # ── Lifespan ──────────────────────────────────────────────────
@@ -109,6 +139,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified.")
     _run_auto_migrations()
+    _reap_interrupted_jobs()
     yield
     logger.info("Shutting down Stock Analyzer AI...")
     engine.dispose()

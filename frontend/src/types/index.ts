@@ -35,6 +35,8 @@ export interface AnalysisJob {
   id: number;
   user_id: number;
   ticker: string;
+  // Populated when status is 'failed'; explains why in user-facing language.
+  error_message?: string | null;
   status: JobStatus;
   report_id: number | null;
   created_at: string;
@@ -163,11 +165,28 @@ export interface ChartData {
     max_drawdown_pct: number | null;
     beta: number | null;
     var_95: number | null;
+    annualized_return?: number | null;
+    window_start?: string | null;
+    window_end?: string | null;
   };
   dcf: {
     intrinsic_value: number | null;
     wacc: number | null;
     current_price: number | null;
+    // Range across the WACC x terminal-growth sensitivity grid.
+    value_low?: number | null;
+    value_high?: number | null;
+    net_debt?: number | null;
+    status?: string | null;
+    error?: string | null;
+  };
+  recommendation?: {
+    call: string | null;
+    composite_score: number | null;
+    confidence: number | null;
+    rationale: string | null;
+    coverage: number | null;
+    factors: RecommendationFactor[];
   };
   liquidity: Record<string, number | null>;
   leverage: Record<string, number | null>;
@@ -176,6 +195,16 @@ export interface ChartData {
     geographic: { name: string; value: number }[];
   };
   dividend_history?: { date: string; dividend: number }[];
+}
+
+// One scored dimension of the recommendation, as produced by the backend
+// scoring engine. `score` is null when the factor had insufficient data.
+export interface RecommendationFactor {
+  key: string;
+  label: string;
+  weight: number;
+  score: number | null;
+  drivers: string[];
 }
 
 // --- API Errors ---

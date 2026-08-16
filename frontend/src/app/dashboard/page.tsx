@@ -101,7 +101,10 @@ export default function DashboardPage() {
             pollIntervalRef.current = null;
             setActiveJobId(null);
             await fetchJobs();
-            setError('Analysis failed. Please try again with a valid ticker.');
+            setError(
+              job.error_message ||
+                'Analysis failed. Please try again with a valid ticker.'
+            );
           }
         } catch {
           clearInterval(pollIntervalRef.current!);
@@ -219,31 +222,39 @@ export default function DashboardPage() {
             {jobs.map((job) => (
               <div
                 key={job.id}
-                className="flex items-center justify-between bg-gray-800/50 border border-gray-800 p-4 rounded-xl"
+                className="bg-gray-800/50 border border-gray-800 p-4 rounded-xl"
               >
-                <div className="flex items-center gap-4">
-                  <span className="font-mono font-bold text-lg">{job.ticker}</span>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      STATUS_COLORS[job.status] || 'bg-gray-500/20 text-gray-400'
-                    }`}
-                  >
-                    {STATUS_LABELS[job.status] || job.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-gray-400 text-sm">
-                    {new Date(job.created_at).toLocaleDateString()}
-                  </span>
-                  {job.status === 'complete' && job.report_id && (
-                    <Link
-                      href={`/report/${job.report_id}`}
-                      className="text-blue-400 hover:text-blue-300 text-sm font-medium transition"
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <span className="font-mono font-bold text-lg">{job.ticker}</span>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        STATUS_COLORS[job.status] || 'bg-gray-500/20 text-gray-400'
+                      }`}
                     >
-                      View Report
-                    </Link>
-                  )}
+                      {STATUS_LABELS[job.status] || job.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-gray-400 text-sm">
+                      {new Date(job.created_at).toLocaleDateString()}
+                    </span>
+                    {job.status === 'complete' && job.report_id && (
+                      <Link
+                        href={`/report/${job.report_id}`}
+                        className="text-blue-400 hover:text-blue-300 text-sm font-medium transition"
+                      >
+                        View Report
+                      </Link>
+                    )}
+                  </div>
                 </div>
+                {/* Tell the user why it failed rather than leaving a bare badge. */}
+                {job.status === 'failed' && job.error_message && (
+                  <p className="mt-3 text-sm text-red-300/80 leading-relaxed">
+                    {job.error_message}
+                  </p>
+                )}
               </div>
             ))}
           </div>

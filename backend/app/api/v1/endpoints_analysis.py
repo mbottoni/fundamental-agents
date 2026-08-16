@@ -33,7 +33,15 @@ def run_analysis_background(job_id: int, ticker: str) -> None:
     except Exception as e:
         logger.error("Background task failed for job %d: %s", job_id, e, exc_info=True)
         try:
-            crud.update_job_status(db, job_id=job_id, status="failed")
+            crud.update_job_status(
+                db,
+                job_id=job_id,
+                status="failed",
+                error_message=(
+                    f"The analysis of {ticker} could not be started. Please try again "
+                    "in a moment."
+                ),
+            )
         except Exception:
             logger.error("Failed to update job %d status to 'failed'", job_id)
     finally:

@@ -91,11 +91,20 @@ def deactivate_subscription_by_stripe_id(db: Session, stripe_customer_id: str) -
 
 
 def count_user_analyses_today(db: Session, user_id: int) -> int:
-    """Count the number of analysis jobs a user has created today."""
+    """
+    Count analyses a user has spent their daily allowance on today.
+
+    Failed jobs are excluded: a user should not lose part of their quota to a
+    bad ticker, an upstream outage, or a bug on our side.
+    """
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     return (
         db.query(func.count(AnalysisJob.id))
-        .filter(AnalysisJob.user_id == user_id, AnalysisJob.created_at >= today_start)
+        .filter(
+            AnalysisJob.user_id == user_id,
+            AnalysisJob.created_at >= today_start,
+            AnalysisJob.status != "failed",
+        )
         .scalar()
         or 0
     )

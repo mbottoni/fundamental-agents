@@ -32,6 +32,10 @@ logger = logging.getLogger("stock_analyzer.orchestrator")
 # Max price points to send to the frontend for charts
 CHART_PRICE_LIMIT = 120
 
+
+class DataUnavailableError(Exception):
+    """Raised when the inputs an analysis needs could not be retrieved."""
+
 class Orchestrator:
     """
     Coordinates the multi‑agent analysis pipeline.
@@ -227,9 +231,24 @@ class Orchestrator:
             raw_data = self.data_agent.run(self.ticker)
 
             if not raw_data or not raw_data.get("profile"):
-                raise ValueError(
-                    f"Could not retrieve essential data for ticker '{self.ticker}'. "
-                    "Verify the ticker symbol is correct."
+                raise DataUnavailableError(
+                    f"No company profile was returned for '{self.ticker}'. Check that the "
+                    "ticker symbol is correct and listed on a supported exchange."
+                )
+
+            if not raw_data.get("prices"):
+                raise DataUnavailableError(
+                    f"No price history was returned for '{self.ticker}', so the technical "
+                    "and risk analysis cannot run. This is usually a temporary data "
+                    "provider issue — please try again shortly."
+                )
+
+            statements = raw_data.get("financials") or {}
+            if not statements.get("income_statement"):
+                raise DataUnavailableError(
+                    f"No financial statements were returned for '{self.ticker}'. Funds, "
+                    "ETFs and some foreign listings do not publish the statements this "
+                    "analysis depends on."
                 )
 
             # ── Step 2: Run analysis agents ──────────────────
@@ -287,7 +306,26 @@ class Orchestrator:
                 self.ticker, job.id, e,
                 exc_info=True,
             )
-            crud.update_job_status(db, job_id=job.id, status="failed")
+            crud.update_job_status(
+                db, job_id=job.id, status="failed", error_message=self._failure_message(e),
+            )
+
+    def _failure_message(self, error: Exception) -> str:
+        """
+        Translate an exception into something the user can act on.
+
+        A bare "failed" leaves no way to tell a mistyped ticker from an expired
+        API key or a provider outage.
+        """
+        if isinstance(error, DataUnavailableError):
+            return str(error)
+        if isinstance(error, ValueError):
+            return str(error)
+        return (
+            f"The analysis of {self.ticker} could not be completed due to an unexpected "
+            "error. Please try again; if it keeps failing, the data provider may be "
+            "unavailable."
+        )
 
 
 def _pct(v: Any) -> float | None:

@@ -9,7 +9,13 @@ from .crud_user import (
     deactivate_subscription_by_stripe_id,
     count_user_analyses_today,
 )
-from .crud_analysis_job import create_analysis_job, get_analysis_job, update_job_status, get_user_jobs
+from .crud_analysis_job import (
+    create_analysis_job,
+    fail_stale_jobs,
+    get_analysis_job,
+    update_job_status,
+    get_user_jobs,
+)
 from .crud_report import create_report, get_report, get_report_by_job_id
 from .crud_watchlist import (
     get_user_watchlist,

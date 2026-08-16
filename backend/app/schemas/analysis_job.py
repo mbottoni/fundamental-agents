@@ -11,10 +11,13 @@ class AnalysisJobBase(BaseModel):
     @field_validator("ticker")
     @classmethod
     def validate_ticker(cls, v: str) -> str:
+        # Allows class shares and exchange suffixes (BRK.B, BF-B, RY.TO) as well
+        # as the six-character symbols a letters-only rule rejected.
         v = v.strip().upper()
-        if not re.match(r"^[A-Z]{1,5}$", v):
+        if not re.match(r"^[A-Z0-9]{1,6}([.\-][A-Z0-9]{1,4})?$", v):
             raise ValueError(
-                "Ticker must be 1 to 5 uppercase letters (e.g. AAPL, MSFT)."
+                "Ticker must be 1 to 6 characters, optionally followed by a class or "
+                "exchange suffix (e.g. AAPL, BRK.B, RY.TO)."
             )
         return v
 
@@ -27,6 +30,7 @@ class AnalysisJob(AnalysisJobBase):
     id: int
     user_id: int
     status: str
+    error_message: Optional[str] = None
     report_id: Optional[int] = None
     created_at: datetime
 
