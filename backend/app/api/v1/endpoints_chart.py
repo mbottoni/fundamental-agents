@@ -7,29 +7,29 @@ for the interactive chart page.
 
 import logging
 import math
+from datetime import date, timedelta
 from typing import Any, Optional
 
-import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.config import settings
+from app import models
+from app.api.deps import get_current_user
+from app.core.market_data import TTL_PRICES, fmp_get
 
 logger = logging.getLogger("stock_analyzer.api.chart")
 router = APIRouter()
 
-FMP_BASE = "https://financialmodelingprep.com/stable"
-HTTP_TIMEOUT = httpx.Timeout(20.0)
-
-
 def _fmp(endpoint: str, params: dict) -> Any:
-    params["apikey"] = settings.FINANCIAL_MODELING_PREP_API_KEY
-    try:
-        r = httpx.get(f"{FMP_BASE}/{endpoint}", params=params, timeout=HTTP_TIMEOUT)
-        r.raise_for_status()
-        return r.json()
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logger.error("FMP chart error %s: %s", endpoint, e)
-        return None
+    return fmp_get(endpoint, params, ttl=TTL_PRICES)
+
+
+# Trading sessions per timeframe; None means the full available history.
+TIMEFRAME_SESSIONS: dict[str, Optional[int]] = {
+    "1m": 21, "3m": 63, "6m": 126, "1y": 252, "2y": 504, "5y": 1260, "max": None,
+}
+# Extra bars fetched so a 200-day average is defined at the left edge.
+INDICATOR_WARMUP_SESSIONS = 200
+CALENDAR_DAYS_PER_SESSION = 1.45
 
 
 def _sma(prices: list[float], period: int) -> list[Optional[float]]:
@@ -121,23 +121,36 @@ def get_chart_data(
     ticker: str,
     timeframe: str = Query("1y", description="1m, 3m, 6m, 1y, 2y, 5y, max"),
     indicators: str = Query("sma", description="Comma-separated: sma,ema,rsi,macd,bollinger"),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Return historical OHLCV data + computed technical indicators for a ticker.
     """
     ticker = ticker.strip().upper()
 
-    raw = _fmp("historical-price-eod/full", {"symbol": ticker})
+    # Ask only for the window being charted. Requesting the full history and
+    # trimming afterwards meant every "1 month" chart downloaded decades of
+    # bars and sorted them in Python.
+    sessions = TIMEFRAME_SESSIONS.get(timeframe, TIMEFRAME_SESSIONS["1y"])
+    params = {"symbol": ticker}
+    if sessions is not None:
+        # Calendar days run ahead of trading sessions; the multiplier leaves
+        # room for weekends and holidays, plus a warm-up for the indicators.
+        span_days = int((sessions + INDICATOR_WARMUP_SESSIONS) * CALENDAR_DAYS_PER_SESSION)
+        start = date.today() - timedelta(days=span_days)
+        params |= {"from": start.isoformat(), "to": date.today().isoformat()}
+
+    raw = _fmp("historical-price-eod/full", params)
     if not raw or not isinstance(raw, list):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No price data for {ticker}")
 
     # Sort chronologically (oldest first)
     raw.sort(key=lambda x: x.get("date", ""))
 
-    # Trim by timeframe
-    tf_map = {"1m": 21, "3m": 63, "6m": 126, "1y": 252, "2y": 504, "5y": 1260, "max": len(raw)}
-    limit = tf_map.get(timeframe, 252)
-    raw = raw[-limit:]
+    # Trim to the requested window; the warm-up bars have done their job by
+    # the time the indicators are computed below.
+    if sessions is not None:
+        raw = raw[-(sessions + INDICATOR_WARMUP_SESSIONS):]
 
     closes = [float(r.get("close", 0)) for r in raw]
     dates = [r.get("date", "") for r in raw]

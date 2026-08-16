@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     EMAILS_FROM_NAME: str = "StockAnalyzer AI"
     EMAILS_FROM_ADDRESS: str = "noreply@stockanalyzer.ai"
 
+    # --- Caching (optional) ---
+    # Set to share the market-data cache across gunicorn workers; without it
+    # each worker keeps its own in-process cache.
+    REDIS_URL: str = ""
+
     # --- Monitoring (optional) ---
     SENTRY_DSN: str = ""
 

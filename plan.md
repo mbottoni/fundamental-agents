@@ -11,19 +11,19 @@ Mark items `[x]` as they land. Each item should ship with tests and a commit.
 
 ## Phase 1 — Stop the bleeding (security & quota)
 
-- [ ] **1.1 Shared FMP client.** Extract `TTLCache` + retry/backoff from
+- [x] **1.1 Shared FMP client.** Extract `TTLCache` + retry/backoff from
   `DataGatheringAgent` into `app/core/market_data.py`. Five endpoint modules
   each define a private `_fmp()` with no retries and no caching.
-- [ ] **1.2 Authenticate market-data endpoints.** `/dashboard/quote`,
+- [x] **1.2 Authenticate market-data endpoints.** `/dashboard/quote`,
   `/quote-batch`, `/search`, `/chart/{ticker}`, `/market/*`, `/screener/*`,
   `/compare/` currently take no auth — the backend is an open proxy to a paid
   FMP key, and the whole app works logged out.
-- [ ] **1.3 Fix or remove `/quote-batch`.** It calls FMP's `batch-quote`,
+- [x] **1.3 Fix or remove `/quote-batch`.** It calls FMP's `batch-quote`,
   which is restricted on the current plan, so it always 502s. Reimplement as
   concurrent single quotes.
-- [ ] **1.4 Bound the chart history request.** `/chart/{ticker}` pulls the
+- [x] **1.4 Bound the chart history request.** `/chart/{ticker}` pulls the
   full history then trims in Python; pass `from`/`to` like the pipeline does.
-- [ ] **1.5 Route interactive endpoints through the cache.** Market movers and
+- [x] **1.5 Route interactive endpoints through the cache.** Market movers and
   sector performance are identical for every user and re-fetched per page view.
 
 ## Phase 2 — Backend robustness

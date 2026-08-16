@@ -8,27 +8,17 @@ a structured side-by-side comparison without running the full analysis pipeline.
 import logging
 from typing import Any, Optional
 
-import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.config import settings
+from app import models
+from app.api.deps import get_current_user
+from app.core.market_data import TTL_PROFILE, TTL_QUOTE, fmp_get
 
 logger = logging.getLogger("stock_analyzer.api.compare")
 router = APIRouter()
 
-FMP_BASE = "https://financialmodelingprep.com/stable"
-HTTP_TIMEOUT = httpx.Timeout(20.0)
-
-
-def _fmp(endpoint: str, params: dict) -> Any:
-    params["apikey"] = settings.FINANCIAL_MODELING_PREP_API_KEY
-    try:
-        r = httpx.get(f"{FMP_BASE}/{endpoint}", params=params, timeout=HTTP_TIMEOUT)
-        r.raise_for_status()
-        return r.json()
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logger.error("FMP error %s: %s", endpoint, e)
-        return None
+def _fmp(endpoint: str, params: dict, ttl: float = TTL_PROFILE) -> Any:
+    return fmp_get(endpoint, params, ttl=ttl)
 
 
 def _safe(v: Any) -> Optional[float]:
@@ -51,7 +41,7 @@ def _get_stock_data(ticker: str) -> dict:
     metrics_raw = _fmp("key-metrics", {"symbol": ticker, "limit": "1"})
     metrics = metrics_raw[0] if isinstance(metrics_raw, list) and metrics_raw else {}
 
-    quote_raw = _fmp("quote", {"symbol": ticker})
+    quote_raw = _fmp("quote", {"symbol": ticker}, ttl=TTL_QUOTE)
     quote = quote_raw[0] if isinstance(quote_raw, list) and quote_raw else {}
 
     growth_raw = _fmp("financial-growth", {"symbol": ticker, "limit": "1"})
@@ -100,6 +90,7 @@ def _get_stock_data(ticker: str) -> dict:
 def compare_stocks(
     ticker1: str = Query(..., description="First ticker symbol"),
     ticker2: str = Query(..., description="Second ticker symbol"),
+    current_user: models.User = Depends(get_current_user),
 ):
     """Compare two stocks side-by-side across valuation, profitability, growth, and health."""
     t1 = ticker1.strip().upper()

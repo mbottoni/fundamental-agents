@@ -7,16 +7,14 @@ Proxy to FMP's stock screener with structured filters.
 import logging
 from typing import Optional
 
-import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.config import settings
+from app import models
+from app.api.deps import get_current_user
+from app.core.market_data import TTL_MARKET, fmp_get
 
 logger = logging.getLogger("stock_analyzer.api.screener")
 router = APIRouter()
-
-FMP_BASE = "https://financialmodelingprep.com/stable"
-HTTP_TIMEOUT = httpx.Timeout(20.0)
 
 
 @router.get("/")
@@ -34,6 +32,7 @@ def screen_stocks(
     country: Optional[str] = Query(None, description="Country (e.g. US, GB)"),
     exchange: Optional[str] = Query(None, description="Exchange (e.g. NASDAQ, NYSE)"),
     limit: int = Query(50, ge=1, le=200, description="Max results"),
+    current_user: models.User = Depends(get_current_user),
 ):
     """
     Screen stocks using FMP's screener API with various filters.
@@ -86,7 +85,7 @@ def screen_stocks(
 
 
 @router.get("/sectors")
-def list_sectors():
+def list_sectors(current_user: models.User = Depends(get_current_user)):
     """Return available sectors for the screener filter."""
     return [
         "Technology", "Healthcare", "Financial Services", "Consumer Cyclical",
@@ -96,6 +95,6 @@ def list_sectors():
 
 
 @router.get("/exchanges")
-def list_exchanges():
+def list_exchanges(current_user: models.User = Depends(get_current_user)):
     """Return available exchanges for the screener filter."""
     return ["NASDAQ", "NYSE", "AMEX", "TSX", "LSE", "EURONEXT"]

@@ -4,88 +4,44 @@ Data Gathering Agent
 Fetches everything the analysis pipeline needs from Financial Modeling Prep
 and NewsAPI.
 
-Three things matter here beyond the raw fetching:
+Two things matter here beyond the raw fetching:
 
-* **Concurrency.** An analysis needs nine separate responses. Issued serially
+* **Concurrency.** An analysis needs eleven separate responses. Issued serially
   they dominate the runtime of the whole pipeline, so they are fanned out
   across a small thread pool.
-* **Retries.** FMP rate-limits aggressively; a single 429 used to fail an
-  entire analysis. Throttled and server-error responses are retried with
-  exponential backoff.
-* **Caching.** Fundamentals change quarterly but were re-fetched on every run,
-  so two users analysing the same ticker burned two full quotas. Responses are
-  cached in-process with a per-endpoint TTL. The cache is per worker, which is
-  the pragmatic step short of introducing Redis.
+* **Shared transport.** Retries, backoff and caching live in
+  `app/core/market_data.py`, so the pipeline and the interactive endpoints
+  behave identically against the provider's quota.
 """
 
 import logging
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from typing import Any, Callable, Optional
 
-import httpx
-
 from ..core.config import settings
+from ..core.market_data import (
+    _MISS,
+    TTL_NEWS,
+    TTL_PRICES,
+    TTL_PROFILE,
+    TTL_STATEMENTS,
+    MarketDataClient,
+    cache_key,
+)
 
 logger = logging.getLogger("stock_analyzer.agents.data_gathering")
 
-# Shared timeout for all external API calls
-HTTP_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
-
-# ── Response cache ────────────────────────────────────────────
-
-_MISS = object()
-
-
-class TTLCache:
-    """A small thread-safe cache with per-entry expiry."""
-
-    def __init__(self, maxsize: int = 512) -> None:
-        self._maxsize = maxsize
-        self._entries: dict[Any, tuple[float, Any]] = {}
-        self._lock = threading.Lock()
-
-    def get(self, key: Any) -> Any:
-        with self._lock:
-            entry = self._entries.get(key)
-            if entry is None:
-                return _MISS
-            expires_at, value = entry
-            if expires_at < time.monotonic():
-                self._entries.pop(key, None)
-                return _MISS
-            return value
-
-    def set(self, key: Any, value: Any, ttl: float) -> None:
-        with self._lock:
-            if len(self._entries) >= self._maxsize:
-                # Cheap eviction: drop whatever expires soonest.
-                oldest = min(self._entries, key=lambda k: self._entries[k][0])
-                self._entries.pop(oldest, None)
-            self._entries[key] = (time.monotonic() + ttl, value)
-
-    def clear(self) -> None:
-        with self._lock:
-            self._entries.clear()
-
-
-_CACHE = TTLCache()
-
-# Cache lifetimes, in seconds, chosen by how often each dataset actually moves.
-STATEMENT_TTL = 24 * 60 * 60
-PROFILE_TTL = 6 * 60 * 60
-PRICE_TTL = 60 * 60
-NEWS_TTL = 30 * 60
+# Retained as module-level names so existing callers and tests keep working.
+STATEMENT_TTL = TTL_STATEMENTS
+PROFILE_TTL = TTL_PROFILE
+PRICE_TTL = TTL_PRICES
+NEWS_TTL = TTL_NEWS
 
 
 class DataGatheringAgent:
     """Gathers raw financial data from external APIs for a given ticker."""
-
-    # FMP migrated from /api/v3 (legacy) to /stable endpoints in Aug 2025.
-    # The new API uses query parameters (?symbol=X) instead of path params (/X).
-    FMP_BASE_URL = "https://financialmodelingprep.com/stable"
 
     # Three years covers the longest window any agent needs (200-day SMA,
     # 52-week range, 1-year risk statistics) without pulling decades of bars.
@@ -93,8 +49,6 @@ class DataGatheringAgent:
     # Market proxy used to regress beta.
     BENCHMARK_TICKER = "SPY"
 
-    MAX_RETRIES = 3
-    BACKOFF_BASE_SECONDS = 0.5
     MAX_WORKERS = 8
 
     # Peer ratios cost one request each, so the list is capped. Peers overlap
@@ -105,63 +59,17 @@ class DataGatheringAgent:
     MAX_TRADING_DAY_LOOKBACK = 5
 
     def __init__(self, use_cache: bool = True) -> None:
-        self.fmp_api_key = settings.FINANCIAL_MODELING_PREP_API_KEY
         self.news_api_key = settings.NEWS_API_KEY
         self.use_cache = use_cache
+        self.client = MarketDataClient(use_cache=use_cache)
 
     # ── HTTP ──────────────────────────────────────────────────
-
-    def _request(self, url: str, params: dict[str, str], label: str) -> Any:
-        """
-        GET with retries on throttling and server errors.
-
-        Client errors other than 429 are permanent for this request (a bad
-        symbol, a revoked key), so they fail fast rather than burning retries.
-        """
-        for attempt in range(self.MAX_RETRIES):
-            try:
-                response = httpx.get(url, params=params, timeout=HTTP_TIMEOUT)
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as e:
-                status = e.response.status_code
-                retryable = status == 429 or status >= 500
-                if not retryable or attempt == self.MAX_RETRIES - 1:
-                    logger.error("%s: HTTP %d (giving up)", label, status)
-                    return None
-                delay = self.BACKOFF_BASE_SECONDS * (2 ** attempt)
-                logger.warning("%s: HTTP %d, retrying in %.1fs", label, status, delay)
-                time.sleep(delay)
-            except httpx.RequestError as e:
-                if attempt == self.MAX_RETRIES - 1:
-                    logger.error("%s: request failed (giving up): %s", label, e)
-                    return None
-                delay = self.BACKOFF_BASE_SECONDS * (2 ** attempt)
-                logger.warning("%s: request error, retrying in %.1fs: %s", label, delay, e)
-                time.sleep(delay)
-        return None
 
     def _fmp_get(
         self, endpoint: str, params: Optional[dict[str, str]] = None, ttl: float = STATEMENT_TTL,
     ) -> Any:
         """GET from the Financial Modeling Prep /stable API, via the cache."""
-        query_params = dict(params or {})
-        cache_key = ("fmp", endpoint, tuple(sorted(query_params.items())))
-
-        if self.use_cache:
-            cached = _CACHE.get(cache_key)
-            if cached is not _MISS:
-                logger.debug("Cache hit for %s %s", endpoint, query_params)
-                return cached
-
-        query_params["apikey"] = self.fmp_api_key
-        data = self._request(f"{self.FMP_BASE_URL}/{endpoint}", query_params, f"FMP {endpoint}")
-
-        # Only successful responses are cached, so a transient outage does not
-        # get frozen in for hours.
-        if self.use_cache and data is not None:
-            _CACHE.set(cache_key, data, ttl)
-        return data
+        return self.client.get(endpoint, params, ttl)
 
     # ── individual datasets ───────────────────────────────────
 
@@ -213,13 +121,15 @@ class DataGatheringAgent:
         else:
             query = ticker
 
-        cache_key = ("news", query)
+        # NewsAPI is not an FMP endpoint, so it is cached by hand against the
+        # same backend rather than going through MarketDataClient.get.
+        key = cache_key("newsapi", {"q": query})
         if self.use_cache:
-            cached = _CACHE.get(cache_key)
+            cached = self.client.cache.get(key)
             if cached is not _MISS:
                 return cached
 
-        articles = self._request(
+        articles = self.client.request(
             "https://newsapi.org/v2/everything",
             {
                 "q": query,
@@ -233,7 +143,7 @@ class DataGatheringAgent:
         result = (articles or {}).get("articles", []) if isinstance(articles, dict) else []
 
         if self.use_cache and result:
-            _CACHE.set(cache_key, result, NEWS_TTL)
+            self.client.cache.set(key, result, NEWS_TTL)
         return result
 
     def get_revenue_segments(self, ticker: str) -> dict[str, Any]:

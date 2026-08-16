@@ -10,20 +10,21 @@ import pytest
 
 from app.agents import data_gathering_agent as module
 from app.agents.data_gathering_agent import DataGatheringAgent
+from app.core import market_data
 
 
 @pytest.fixture(autouse=True)
 def clear_cache():
     """The response cache is process-wide; isolate every test from the last."""
-    module._CACHE.clear()
+    market_data.CACHE.clear()
     yield
-    module._CACHE.clear()
+    market_data.CACHE.clear()
 
 
 @pytest.fixture(autouse=True)
 def no_backoff_sleep(monkeypatch):
     """Keep retry backoff out of the test runtime without patching time itself."""
-    monkeypatch.setattr(DataGatheringAgent, "BACKOFF_BASE_SECONDS", 0)
+    monkeypatch.setattr(market_data, "BACKOFF_BASE_SECONDS", 0)
 
 
 class FakeHTTP:
@@ -55,7 +56,7 @@ class FakeHTTP:
 @pytest.fixture
 def http(monkeypatch) -> FakeHTTP:
     fake = FakeHTTP()
-    monkeypatch.setattr(module.httpx, "get", fake)
+    monkeypatch.setattr(market_data.httpx, "get", fake)
     return fake
 
 
@@ -92,9 +93,9 @@ class TestCaching:
         agent.get_company_profile("AAPL")
 
         # Jump past the profile TTL.
-        real_monotonic = module.time.monotonic
+        real_monotonic = market_data.time.monotonic
         monkeypatch.setattr(
-            module.time, "monotonic", lambda: real_monotonic() + module.PROFILE_TTL + 1
+            market_data.time, "monotonic", lambda: real_monotonic() + module.PROFILE_TTL + 1
         )
         agent.get_company_profile("AAPL")
         assert len(http.urls_containing("profile")) == 2
@@ -127,7 +128,7 @@ class TestRetries:
         agent = DataGatheringAgent()
 
         assert agent.get_company_profile("AAPL") is None
-        assert len(http.urls_containing("profile")) == agent.MAX_RETRIES
+        assert len(http.urls_containing("profile")) == market_data.MAX_RETRIES
 
     def test_connection_errors_are_retried(self, monkeypatch):
         attempts = {"count": 0}
@@ -138,7 +139,7 @@ class TestRetries:
                 raise httpx.ConnectError("boom")
             return httpx.Response(200, json=[{"companyName": "Apple"}], request=httpx.Request("GET", url))
 
-        monkeypatch.setattr(module.httpx, "get", flaky)
+        monkeypatch.setattr(market_data.httpx, "get", flaky)
         assert DataGatheringAgent().get_company_profile("AAPL") == {"companyName": "Apple"}
         assert attempts["count"] == 3
 
@@ -216,7 +217,7 @@ class TestRun:
                 in_flight["current"] -= 1
             return httpx.Response(200, json=[], request=httpx.Request("GET", url))
 
-        monkeypatch.setattr(module.httpx, "get", slow_get)
+        monkeypatch.setattr(market_data.httpx, "get", slow_get)
         DataGatheringAgent(use_cache=False).run("AAPL")
 
         assert in_flight["peak"] > 1

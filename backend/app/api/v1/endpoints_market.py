@@ -10,34 +10,25 @@ Provides market-wide data:
 import logging
 from typing import Any
 
-import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.config import settings
+from app import models
+from app.api.deps import get_current_user
+from app.core.market_data import TTL_MARKET, fmp_get
 
 logger = logging.getLogger("stock_analyzer.api.market")
 router = APIRouter()
 
-FMP_BASE = "https://financialmodelingprep.com/stable"
-HTTP_TIMEOUT = httpx.Timeout(20.0)
-
 
 def _fmp(endpoint: str, params: dict | None = None) -> Any:
-    p = params or {}
-    p["apikey"] = settings.FINANCIAL_MODELING_PREP_API_KEY
-    try:
-        r = httpx.get(f"{FMP_BASE}/{endpoint}", params=p, timeout=HTTP_TIMEOUT)
-        r.raise_for_status()
-        return r.json()
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logger.error("FMP market error %s: %s", endpoint, e)
-        return None
+    """Market-wide data is identical for every user, so it caches well."""
+    return fmp_get(endpoint, params or {}, ttl=TTL_MARKET)
 
 
 # ── Market Movers ─────────────────────────────────────────────
 
 @router.get("/gainers")
-def top_gainers():
+def top_gainers(current_user: models.User = Depends(get_current_user)):
     data = _fmp("gainers")
     if not data:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not fetch gainers.")
@@ -45,7 +36,7 @@ def top_gainers():
 
 
 @router.get("/losers")
-def top_losers():
+def top_losers(current_user: models.User = Depends(get_current_user)):
     data = _fmp("losers")
     if not data:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not fetch losers.")
@@ -53,7 +44,7 @@ def top_losers():
 
 
 @router.get("/most-active")
-def most_active():
+def most_active(current_user: models.User = Depends(get_current_user)):
     data = _fmp("actives")
     if not data:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not fetch active stocks.")
@@ -63,7 +54,7 @@ def most_active():
 # ── Sector Performance ────────────────────────────────────────
 
 @router.get("/sector-performance")
-def sector_performance():
+def sector_performance(current_user: models.User = Depends(get_current_user)):
     data = _fmp("sector-performance")
     if not data:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not fetch sector performance.")
@@ -117,7 +108,7 @@ STOCK_THEMES = {
 
 
 @router.get("/lists")
-def get_stock_lists():
+def get_stock_lists(current_user: models.User = Depends(get_current_user)):
     """Return all available curated stock lists with metadata."""
     return [
         {"id": k, "name": v["name"], "description": v["description"], "count": len(v["tickers"])}
@@ -126,7 +117,7 @@ def get_stock_lists():
 
 
 @router.get("/lists/{list_id}")
-def get_stock_list_detail(list_id: str):
+def get_stock_list_detail(list_id: str, current_user: models.User = Depends(get_current_user)):
     """Return a curated stock list with live quotes for each ticker."""
     theme = STOCK_THEMES.get(list_id)
     if not theme:

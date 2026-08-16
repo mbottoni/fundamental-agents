@@ -8,7 +8,6 @@ Provides quick‑access data for the frontend dashboard:
 
 import logging
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -16,61 +15,83 @@ from app import crud, models
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.market_data import TTL_QUOTE, TTL_SEARCH, client, fmp_get
 
 logger = logging.getLogger("stock_analyzer.api.dashboard")
 
 router = APIRouter()
 
-FMP_BASE = "https://financialmodelingprep.com/stable"
-HTTP_TIMEOUT = httpx.Timeout(15.0)
+# A batch request larger than this is either a mistake or an attempt to use the
+# deployment as a bulk market-data feed.
+MAX_BATCH_SYMBOLS = 25
 
 
 # ── Quick Quote ───────────────────────────────────────────────
 
 @router.get("/quote/{ticker}")
-def get_quick_quote(ticker: str):
-    """
-    Return a real‑time quote for a single ticker from FMP.
-    No authentication required — public endpoint.
-    """
+def get_quick_quote(
+    ticker: str,
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return a quote for a single ticker."""
     ticker = ticker.strip().upper()
-    try:
-        resp = httpx.get(
-            f"{FMP_BASE}/quote",
-            params={"symbol": ticker, "apikey": settings.FINANCIAL_MODELING_PREP_API_KEY},
-            timeout=HTTP_TIMEOUT,
+    data = fmp_get("quote", {"symbol": ticker}, ttl=TTL_QUOTE)
+
+    if data is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not fetch a quote from the market data provider.",
         )
-        resp.raise_for_status()
-        data = resp.json()
-        if not data or (isinstance(data, list) and len(data) == 0):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No quote found for {ticker}")
-        return data[0] if isinstance(data, list) else data
-    except httpx.HTTPStatusError as e:
-        logger.error("FMP quote error for %s: %s", ticker, e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not fetch quote from market data provider.")
-    except httpx.RequestError as e:
-        logger.error("FMP quote request error: %s", e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Market data provider unreachable.")
+    if isinstance(data, list):
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"No quote found for {ticker}."
+            )
+        return data[0]
+    return data
 
 
 @router.get("/quote-batch")
-def get_batch_quotes(symbols: str = Query(..., description="Comma-separated ticker symbols")):
+def get_batch_quotes(
+    symbols: str = Query(..., description="Comma-separated ticker symbols"),
+    current_user: models.User = Depends(get_current_user),
+):
     """
-    Return real‑time quotes for multiple tickers in one call.
-    No authentication required.
+    Return quotes for several tickers.
+
+    FMP's own batch-quote endpoint is not available on the current plan — it
+    answers every request with "Restricted Endpoint", so this used to fail
+    100% of the time. Single quotes are issued concurrently instead, and the
+    per-symbol cache means a repeated watchlist refresh mostly costs nothing.
     """
-    symbols = symbols.strip().upper()
-    try:
-        resp = httpx.get(
-            f"{FMP_BASE}/batch-quote",
-            params={"symbols": symbols, "apikey": settings.FINANCIAL_MODELING_PREP_API_KEY},
-            timeout=HTTP_TIMEOUT,
+    requested = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not requested:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No ticker symbols supplied."
         )
-        resp.raise_for_status()
-        return resp.json()
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logger.error("FMP batch quote error: %s", e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not fetch quotes.")
+    if len(requested) > MAX_BATCH_SYMBOLS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"At most {MAX_BATCH_SYMBOLS} symbols can be requested at once.",
+        )
+
+    # Deduplicate while preserving the caller's order.
+    unique = list(dict.fromkeys(requested))
+    results = client.get_many(
+        {
+            symbol: (lambda s=symbol: fmp_get("quote", {"symbol": s}, ttl=TTL_QUOTE))
+            for symbol in unique
+        }
+    )
+
+    quotes = []
+    for symbol in unique:
+        payload = results.get(symbol)
+        if isinstance(payload, list) and payload:
+            quotes.append(payload[0])
+        elif isinstance(payload, dict):
+            quotes.append(payload)
+    return quotes
 
 
 # ── Dashboard Stats ───────────────────────────────────────────
@@ -108,19 +129,12 @@ def get_dashboard_stats(
 # ── Search ────────────────────────────────────────────────────
 
 @router.get("/search")
-def search_ticker(q: str = Query(..., min_length=1, description="Search query")):
-    """
-    Search for stock tickers/companies by name or symbol.
-    No authentication required.
-    """
-    try:
-        resp = httpx.get(
-            f"{FMP_BASE}/search-symbol",
-            params={"query": q.strip(), "apikey": settings.FINANCIAL_MODELING_PREP_API_KEY, "limit": "10"},
-            timeout=HTTP_TIMEOUT,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logger.error("FMP search error: %s", e)
+def search_ticker(
+    q: str = Query(..., min_length=1, description="Search query"),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Search for stock tickers or companies by name or symbol."""
+    data = fmp_get("search-symbol", {"query": q.strip(), "limit": "10"}, ttl=TTL_SEARCH)
+    if data is None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Search failed.")
+    return data
