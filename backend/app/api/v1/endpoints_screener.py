@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app import models
 from app.api.deps import get_current_user
-from app.core.market_data import TTL_MARKET, fmp_get
+from app.core.market_data import PLAN_RESTRICTED, TTL_MARKET, fmp_get
 
 logger = logging.getLogger("stock_analyzer.api.screener")
 router = APIRouter()
@@ -38,10 +38,7 @@ def screen_stocks(
     Screen stocks using FMP's screener API with various filters.
     Returns a list of matching stocks with key metrics.
     """
-    params: dict = {
-        "apikey": settings.FINANCIAL_MODELING_PREP_API_KEY,
-        "limit": str(limit),
-    }
+    params: dict = {"limit": str(limit)}
 
     if sector:
         params["sector"] = sector
@@ -68,20 +65,23 @@ def screen_stocks(
     if exchange:
         params["exchange"] = exchange.upper()
 
-    try:
-        resp = httpx.get(
-            f"{FMP_BASE}/stock-screener",
-            params=params,
-            timeout=HTTP_TIMEOUT,
+    results = fmp_get("company-screener", params, ttl=TTL_MARKET)
+
+    if results is PLAN_RESTRICTED:
+        # Say so rather than rendering an empty result set, which reads as
+        # "nothing matched your filters".
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Stock screening is not included in the current market data plan. "
+                "Other features are unaffected."
+            ),
         )
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error("FMP screener HTTP error: %s", e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Screener request failed.")
-    except httpx.RequestError as e:
-        logger.error("FMP screener request error: %s", e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Market data provider unreachable.")
+    if results is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Screener request failed."
+        )
+    return results
 
 
 @router.get("/sectors")

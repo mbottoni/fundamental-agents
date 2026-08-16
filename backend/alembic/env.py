@@ -19,8 +19,13 @@ from app.db.base import Base  # noqa: E402  (imports all models)
 
 config = context.config
 
-# Override sqlalchemy.url with the real DATABASE_URL
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Use the app's DATABASE_URL unless the caller supplied a real one. Overriding
+# unconditionally meant migrations always ran against the environment's
+# database, whatever target was requested — including in tests.
+PLACEHOLDER_URL = "driver://user:pass@localhost/dbname"
+configured_url = config.get_main_option("sqlalchemy.url", None)
+if not configured_url or configured_url == PLACEHOLDER_URL:
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

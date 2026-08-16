@@ -45,6 +45,26 @@ TTL_SEARCH = 60 * 60
 _MISS = object()
 
 
+class _PlanRestricted:
+    """
+    Sentinel for an endpoint the provider subscription does not include.
+
+    FMP answers those with HTTP 200 and a plain-text body, so without this they
+    look like a successful empty response and the feature silently renders "no
+    results" instead of explaining that it needs a different plan.
+    """
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<PLAN_RESTRICTED>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+PLAN_RESTRICTED = _PlanRestricted()
+RESTRICTED_MARKER = "Restricted Endpoint"
+
+
 class CacheBackend(Protocol):
     def get(self, key: str) -> Any: ...
     def set(self, key: str, value: Any, ttl: float) -> None: ...
@@ -164,7 +184,16 @@ class MarketDataClient:
             try:
                 response = httpx.get(url, params=params, timeout=DEFAULT_TIMEOUT)
                 response.raise_for_status()
-                return response.json()
+                if RESTRICTED_MARKER in response.text[:200]:
+                    logger.error("%s: not included in the current provider plan", label)
+                    return PLAN_RESTRICTED
+                try:
+                    return response.json()
+                except ValueError:
+                    # A 200 that is not JSON is a provider-side problem, and
+                    # retrying an unparseable body will not fix it.
+                    logger.error("%s: response was not valid JSON", label)
+                    return None
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
                 retryable = status_code == 429 or status_code >= 500
@@ -203,8 +232,9 @@ class MarketDataClient:
         data = self.request(f"{FMP_BASE_URL}/{endpoint}", query, f"FMP {endpoint}")
 
         # Only successful responses are cached, so a transient outage does not
-        # get frozen in for hours.
-        if self.use_cache and data is not None:
+        # get frozen in for hours. A plan restriction is not transient, but it
+        # is not serialisable either, so it is left uncached.
+        if self.use_cache and data is not None and data is not PLAN_RESTRICTED:
             self.cache.set(key, data, ttl)
         return data
 

@@ -13,6 +13,7 @@ from .crud_analysis_job import (
     create_analysis_job,
     fail_stale_jobs,
     get_analysis_job,
+    get_recent_complete_job,
     update_job_status,
     get_user_jobs,
 )

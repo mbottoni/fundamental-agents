@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # --- Rate Limiting ---
     RATE_LIMIT_PER_MINUTE: int = 30
     FREE_TIER_DAILY_ANALYSES: int = 3
+    # A repeat analysis of the same ticker within this window returns the
+    # existing report instead of re-running the pipeline.
+    ANALYSIS_REUSE_HOURS: int = 12
 
     # --- Email (optional - logs tokens to console when unset) ---
     SMTP_HOST: str = ""

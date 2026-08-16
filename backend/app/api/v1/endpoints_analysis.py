@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
@@ -52,13 +52,34 @@ def run_analysis_background(job_id: int, ticker: str) -> None:
 def start_analysis(
     request: schemas.AnalysisJobCreate,
     background_tasks: BackgroundTasks,
+    force: bool = Query(
+        False, description="Re-run even if a recent analysis of this ticker exists"
+    ),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """
     Start a new stock analysis job for the given ticker.
-    Free-tier users are limited to a configurable daily cap.
+
+    A recent completed analysis of the same ticker is returned as-is unless
+    `force` is set: the underlying filings are quarterly, so re-running minutes
+    later spends eleven provider requests and one of the user's daily analyses
+    to rebuild the same report. Free-tier users are limited to a daily cap.
     """
+    if not force:
+        recent = crud.get_recent_complete_job(
+            db,
+            user_id=current_user.id,
+            ticker=request.ticker,
+            within_hours=settings.ANALYSIS_REUSE_HOURS,
+        )
+        if recent is not None:
+            logger.info(
+                "Reusing analysis job %d for %s (user %d)",
+                recent.id, request.ticker, current_user.id,
+            )
+            return recent
+
     # Enforce free-tier daily limit
     if current_user.subscription_status != "active":
         today_count = crud.count_user_analyses_today(db, current_user.id)

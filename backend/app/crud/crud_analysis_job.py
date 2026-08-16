@@ -24,6 +24,32 @@ def get_analysis_job(db: Session, job_id: int) -> Optional[AnalysisJob]:
     return db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
 
 
+def get_recent_complete_job(
+    db: Session, user_id: int, ticker: str, within_hours: int
+) -> Optional[AnalysisJob]:
+    """
+    The user's most recent completed analysis of a ticker, if it is fresh.
+
+    Re-running the same ticker minutes later costs a full pipeline pass, eleven
+    provider requests and one of the user's daily analyses, to produce the same
+    report from the same quarterly filings.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    return (
+        db.query(AnalysisJob)
+        .filter(
+            AnalysisJob.user_id == user_id,
+            AnalysisJob.ticker == ticker.upper(),
+            AnalysisJob.status == "complete",
+            AnalysisJob.created_at >= cutoff,
+        )
+        .order_by(AnalysisJob.created_at.desc())
+        .first()
+    )
+
+
 def get_user_jobs(db: Session, user_id: int) -> list[AnalysisJob]:
     """Retrieve all analysis jobs for a user, ordered by most recent first."""
     return (

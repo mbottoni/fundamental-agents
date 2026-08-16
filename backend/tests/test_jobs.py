@@ -115,6 +115,97 @@ class TestQuotaAccounting:
         assert blocked.status_code == 429
 
 
+class TestAnalysisReuse:
+    def test_a_recent_completed_analysis_is_returned_again(self, client, auth_headers, db):
+        """
+        Filings are quarterly; re-running minutes later spends eleven provider
+        requests and one of the user's daily analyses to rebuild the same
+        report.
+        """
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        job_id = first.json()["id"]
+        crud.update_job_status(db, job_id=job_id, status="complete")
+
+        second = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        assert second.json()["id"] == job_id
+
+    def test_force_starts_a_fresh_run(self, client, auth_headers, db):
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        job_id = first.json()["id"]
+        crud.update_job_status(db, job_id=job_id, status="complete")
+
+        forced = client.post(
+            "/api/v1/analysis/?force=true", json={"ticker": "AAPL"}, headers=auth_headers
+        )
+        assert forced.json()["id"] != job_id
+
+    def test_incomplete_runs_are_not_reused(self, client, auth_headers):
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        second = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        assert second.json()["id"] != first.json()["id"]
+
+    def test_failed_runs_are_not_reused(self, client, auth_headers, db):
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        crud.update_job_status(
+            db, job_id=first.json()["id"], status="failed", error_message="upstream"
+        )
+        second = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        assert second.json()["id"] != first.json()["id"]
+
+    def test_a_different_ticker_is_not_reused(self, client, auth_headers, db):
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        crud.update_job_status(db, job_id=first.json()["id"], status="complete")
+
+        other = client.post("/api/v1/analysis/", json={"ticker": "MSFT"}, headers=auth_headers)
+        assert other.json()["ticker"] == "MSFT"
+        assert other.json()["id"] != first.json()["id"]
+
+    def test_another_users_analysis_is_not_reused(self, client, auth_headers, db):
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        crud.update_job_status(db, job_id=first.json()["id"], status="complete")
+
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": "second@example.com", "password": "SecondPass123"},
+        )
+        token = client.post(
+            "/api/v1/auth/login",
+            data={"username": "second@example.com", "password": "SecondPass123"},
+        ).json()["access_token"]
+
+        theirs = client.post(
+            "/api/v1/analysis/",
+            json={"ticker": "AAPL"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert theirs.json()["id"] != first.json()["id"]
+
+    def test_a_stale_analysis_is_not_reused(self, client, auth_headers, db, monkeypatch):
+        from app.api.v1 import endpoints_analysis
+
+        first = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        crud.update_job_status(db, job_id=first.json()["id"], status="complete")
+
+        monkeypatch.setattr(endpoints_analysis.settings, "ANALYSIS_REUSE_HOURS", 0)
+        second = client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        assert second.json()["id"] != first.json()["id"]
+
+    def test_reuse_does_not_consume_the_daily_allowance(self, client, auth_headers, db):
+        job_id = client.post(
+            "/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers
+        ).json()["id"]
+        crud.update_job_status(db, job_id=job_id, status="complete")
+
+        # Three further requests for the same ticker all reuse the report, so
+        # the free-tier cap is untouched and other tickers still work.
+        for _ in range(3):
+            client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+
+        assert client.post(
+            "/api/v1/analysis/", json={"ticker": "MSFT"}, headers=auth_headers
+        ).status_code == 202
+
+
 class TestInterruptedJobRecovery:
     def test_in_progress_jobs_are_failed_with_an_explanation(self, db, client, auth_headers):
         user = crud.get_user_by_email(db, "test@example.com")

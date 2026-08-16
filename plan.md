@@ -28,16 +28,16 @@ Mark items `[x]` as they land. Each item should ship with tests and a commit.
 
 ## Phase 2 — Backend robustness
 
-- [ ] **2.1 API-layer tests.** Chart, market, screener, compare, watchlist,
+- [x] **2.1 API-layer tests.** Chart, market, screener, compare, watchlist,
   dashboard and Stripe have no coverage. Webhook first — it is the money path.
-- [ ] **2.2 Harden the Stripe webhook.** `int(client_ref_id)` 500s on
+- [x] **2.2 Harden the Stripe webhook.** `int(client_ref_id)` 500s on
   malformed input; `invoice.payment_failed` only logs, so a failed payment
   leaves a subscription active indefinitely.
-- [ ] **2.3 Reuse same-day analyses.** A repeat request for the same ticker
+- [x] **2.3 Reuse same-day analyses.** A repeat request for the same ticker
   re-runs the whole pipeline and burns both quota and the user's allowance.
-- [ ] **2.4 Optional Redis cache backend.** The in-process cache is per worker;
+- [x] **2.4 Optional Redis cache backend.** *(landed with 1.1)* The in-process cache is per worker;
   production runs four, so the cache and the rate limiter both fragment.
-- [ ] **2.5 Alembic baseline.** `versions/` is empty; the schema is maintained
+- [x] **2.5 Alembic baseline.** `versions/` is empty; the schema is maintained
   by the hand-rolled `_run_auto_migrations()` in `main.py`.
 
 ## Phase 3 — Frontend

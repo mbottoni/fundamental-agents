@@ -128,7 +128,19 @@ async def stripe_webhook(
         stripe_customer_id = session.get("customer")
 
         if client_ref_id and stripe_customer_id:
-            user_id = int(client_ref_id)
+            # The reference is whatever was set when the session was created;
+            # a malformed value should not turn into a 500 that makes Stripe
+            # retry the delivery indefinitely.
+            try:
+                user_id = int(client_ref_id)
+            except (TypeError, ValueError):
+                logger.error("Webhook has a non-numeric client_reference_id: %r", client_ref_id)
+                return {"status": "ignored"}
+
+            if crud.get_user_by_id(db, user_id) is None:
+                logger.error("Webhook references unknown user %d", user_id)
+                return {"status": "ignored"}
+
             crud.update_user_subscription(
                 db, user_id=user_id, stripe_customer_id=stripe_customer_id, status="active",
             )
@@ -146,10 +158,38 @@ async def stripe_webhook(
             else:
                 logger.warning("No user found for stripe customer %s during subscription.deleted", stripe_customer_id)
 
-    # ── Invoice payment failed: warn
+    # ── Invoice payment failed: mark past due
     elif event_type == "invoice.payment_failed":
         stripe_customer_id = session.get("customer")
         logger.warning("Payment failed for stripe customer %s", stripe_customer_id)
+        if stripe_customer_id:
+            # Previously this only logged, so a subscription whose payments had
+            # stopped stayed active forever. "past_due" is not "active", so
+            # premium access lapses while Stripe retries; a later successful
+            # payment re-activates through invoice.payment_succeeded.
+            user = crud.get_user_by_stripe_customer_id(db, stripe_customer_id)
+            if user:
+                crud.update_user_subscription(
+                    db,
+                    user_id=user.id,
+                    stripe_customer_id=stripe_customer_id,
+                    status="past_due",
+                )
+                logger.info("User %d marked past_due after a failed payment", user.id)
+
+    # ── Invoice paid: restore access after a recovered failure
+    elif event_type in ("invoice.payment_succeeded", "invoice.paid"):
+        stripe_customer_id = session.get("customer")
+        if stripe_customer_id:
+            user = crud.get_user_by_stripe_customer_id(db, stripe_customer_id)
+            if user and user.subscription_status != "active":
+                crud.update_user_subscription(
+                    db,
+                    user_id=user.id,
+                    stripe_customer_id=stripe_customer_id,
+                    status="active",
+                )
+                logger.info("User %d reactivated after a successful payment", user.id)
 
     else:
         logger.debug("Unhandled Stripe event type: %s", event_type)

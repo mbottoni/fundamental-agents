@@ -134,6 +134,49 @@ class TestClient:
         assert len(results) == 6
         assert state["peak"] > 1
 
+    def test_a_restricted_endpoint_is_distinguishable(self, monkeypatch):
+        """
+        The provider answers out-of-plan endpoints with 200 and a text body, so
+        without this they look like a successful empty response.
+        """
+        monkeypatch.setattr(
+            market_data.httpx,
+            "get",
+            lambda url, params=None, timeout=None: httpx.Response(
+                200,
+                text="Restricted Endpoint: not available under your current subscription",
+                request=httpx.Request("GET", url),
+            ),
+        )
+        result = MarketDataClient(use_cache=False).get("company-screener", {})
+        assert result is market_data.PLAN_RESTRICTED
+        assert not result  # falsy, so `if not data` guards still work
+
+    def test_restrictions_are_not_cached(self, monkeypatch):
+        calls = {"n": 0}
+
+        def restricted(url, params=None, timeout=None):
+            calls["n"] += 1
+            return httpx.Response(
+                200, text="Restricted Endpoint: nope", request=httpx.Request("GET", url)
+            )
+
+        monkeypatch.setattr(market_data.httpx, "get", restricted)
+        client = MarketDataClient()
+        client.get("company-screener", {})
+        client.get("company-screener", {})
+        assert calls["n"] == 2
+
+    def test_a_non_json_body_is_a_failure_not_a_crash(self, monkeypatch):
+        monkeypatch.setattr(
+            market_data.httpx,
+            "get",
+            lambda url, params=None, timeout=None: httpx.Response(
+                200, text="<html>gateway error</html>", request=httpx.Request("GET", url)
+            ),
+        )
+        assert MarketDataClient(use_cache=False).get("quote", {}) is None
+
     def test_get_many_isolates_failures(self):
         def boom():
             raise RuntimeError("upstream died")
