@@ -60,16 +60,22 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 5. `NewsSentimentAgent` — VADER with a finance lexicon, relevance filtering, and recency weighting
 6. `ValuationAgent` — two-stage FCFF DCF: discount unlevered FCF at WACC, then bridge to equity via `EV − debt + cash`. Returns a sensitivity grid, not just a point estimate
 7. `PeerComparisonAgent` — multiples against the peer median and the sector/industry P/E snapshots. Both sides come from FMP's `ratios-ttm` so the comparison is like for like; feeds a relative valuation score into the recommendation
-8. `RecommendationEngine` (`recommendation.py`) — scores six weighted factors into the buy/hold/sell call; run by the orchestrator, not by an agent
-9. `SynthesisReportingAgent` — renders the markdown report from all of the above
+8. `EarningsAgent` — next report date and the recent surprise record; an imminent report lowers confidence
+9. `RecommendationEngine` (`recommendation.py`) — scores six weighted factors into the buy/hold/sell call; run by the orchestrator, not by an agent
+10. `NarrativeAgent` — the only model call in the pipeline. Explains the conclusions in prose; disabled without `ANTHROPIC_API_KEY`, and never fatal
+11. `SynthesisReportingAgent` — renders the markdown report from all of the above
 
 **Where to be careful:** the DCF must keep its equity bridge and its guard rails (negative FCF, the WACC-vs-terminal-growth spread, negative equity value) — each exists because removing it produces confident nonsense. The recommendation is capped by the valuation factor so quality and growth cannot outvote price entirely.
 
 The orchestrator writes job status at each stage (`pending → gathering_data → analyzing → generating_report → complete | failed`); the frontend dashboard polls `GET /api/v1/analysis/{id}` every 4s. Exceptions are caught and turned into a user-facing `error_message` on the job via `Orchestrator._failure_message`; raise `DataUnavailableError` with an explanatory message for anything the user could act on. Jobs left mid-flight by a restart are failed at startup by `_reap_interrupted_jobs`.
 
+Each completed analysis also writes an `AnalysisSnapshot` — the recommendation, score and price at that moment. It backs `/api/v1/history/*` (per-ticker history, past-call performance, leaderboard) and the watchlist alerts, and cannot be reconstructed after the fact.
+
 **Two outputs per job:** the markdown `Report.content`, and `Report.chart_data`, a JSON **string** built by `Orchestrator._build_chart_data()`. That dict is the contract for the report page's Recharts components — its shape must stay in sync with `ChartData` in `frontend/src/types/index.ts`. It is serialized in `crud.create_report` and deserialized by a `field_validator` on `schemas.Report`.
 
 When adding an agent: write the class with `run()`, instantiate it in `Orchestrator.__init__`, call it in `run_analysis`, and thread its output into both `_build_chart_data` and `SynthesisReportingAgent.run`. If it produces something the recommendation should weigh, add a factor in `recommendation.py` rather than special-casing it in the report.
+
+**Background work:** a periodic asyncio task in `lifespan` sweeps every watchlist for alerts (`ALERT_SWEEP_MINUTES`, 0 disables). It runs the blocking evaluation in a worker thread and survives its own failures.
 
 **Verifying against the live API:** unit tests stub all HTTP, so FMP field names and endpoint paths are only checked by running the pipeline for real. `Orchestrator(...).data_agent.run(ticker)` plus the agents, with no DB, is enough to catch a renamed field — that is how the `dividends` endpoint 404 and the zero-interest-coverage issue were found.
 
@@ -77,11 +83,13 @@ When adding an agent: write the class with `run()`, instantiate it in `Orchestra
 
 One module per resource in `app/api/v1/endpoints_*.py`, each exporting `router`, wired up with a prefix in `app/main.py`. Auth is JWT via `Depends(get_current_user)` from `app/api/deps.py`.
 
-Two distinct data-access styles coexist — match whichever file you're in:
-- Pipeline agents go through `DataGatheringAgent._fmp_get`.
-- The live/interactive endpoints (`chart`, `market`, `screener`, `compare`, `dashboard`) each define their own local `_fmp()` helper and call FMP directly, with no caching.
+**Every provider-backed endpoint must require auth.** Without it the deployment is an open proxy to a paid market-data key; `tests/test_endpoint_auth.py` walks the route list, so a new unauthenticated one fails CI.
 
-**FMP gotcha:** the app targets the `/stable` API (`https://financialmodelingprep.com/stable`), which takes `?symbol=AAPL` query params, not the legacy `/api/v3/{path}/AAPL` form.
+All FMP traffic goes through `app/core/market_data.py` — retries with backoff on 429/5xx, per-endpoint TTL caching, and an optional Redis backend via `REDIS_URL`. Do not add a local `_fmp()` helper to an endpoint module.
+
+**FMP gotchas:**
+- The app targets the `/stable` API (`https://financialmodelingprep.com/stable`), which takes `?symbol=AAPL` query params, not the legacy `/api/v3/{path}/AAPL` form.
+- Out-of-plan endpoints answer with **HTTP 200 and a plain-text body**, not an error status. The client detects those (`PLAN_RESTRICTED`) so a feature can say it needs a different plan instead of rendering "no results". `company-screener` and `batch-quote` are restricted on the current plan, and `earnings` caps `limit` at 5.
 
 ### Auth, tiers, and payments
 

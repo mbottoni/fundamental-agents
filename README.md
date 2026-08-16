@@ -50,7 +50,9 @@ The **Orchestrator** coordinates specialized agents, then scores the result:
 | **News Sentiment** | VADER with a financial lexicon, relevance filtering and recency weighting | News articles |
 | **Valuation** | Two-stage FCFF DCF discounted at WACC, bridged to equity value, with a WACC x terminal-growth sensitivity grid | Financial data + profile |
 | **Peer Comparison** | Multiples against the peer median and sector/industry P/E, with premium/discount and percentile rank | Financial Modeling Prep |
+| **Earnings** | Next report date, consensus estimate, and the recent surprise record | Financial Modeling Prep |
 | **Recommendation** | Scores six weighted factors -- valuation, quality, financial health, growth, momentum, sentiment -- into a buy/hold/sell call, capped by valuation | All agent outputs |
+| **Narrative** *(optional)* | Plain-English summary of the conclusions; disabled without an `ANTHROPIC_API_KEY` | All agent outputs |
 | **Synthesis** | Markdown report with a scorecard showing every factor's score and drivers | All agent outputs |
 
 Factors without data are dropped and their weight redistributed, so a company
@@ -170,6 +172,10 @@ python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 | `GET` | `/api/v1/market/*` | Movers, sectors, lists | Yes |
 | `POST` | `/api/v1/stripe/create-checkout-session` | Start checkout | Yes |
 | `POST` | `/api/v1/stripe/webhook` | Stripe events | No |
+| `GET` | `/api/v1/history/{ticker}` | Analysis history for a ticker | Yes |
+| `GET` | `/api/v1/history/` | How past calls have performed | Yes |
+| `GET` | `/api/v1/history/leaderboard` | Analysed tickers ranked by score | Yes |
+| `GET`/`POST` | `/api/v1/alerts/*` | Watchlist alerts | Yes |
 | `GET` | `/health` | Health check | No |
 
 ### Job Status Flow
