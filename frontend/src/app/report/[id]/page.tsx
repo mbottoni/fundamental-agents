@@ -7,6 +7,9 @@ import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import type { Report, ChartData, PricePoint, BarDataPoint } from '@/types';
+import AppNav from '@/components/AppNav';
+import RecommendationScorecard from '@/components/charts/RecommendationScorecard';
+import PeerComparison from '@/components/charts/PeerComparison';
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -294,6 +297,63 @@ function Stat({ label, value, sub, color }: {
    DCF Comparison
    ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * The span of DCF outcomes across the assumption grid, with the point estimate
+ * and the market price marked on it.
+ */
+function RangeBar({
+  low,
+  high,
+  estimate,
+  marker,
+}: {
+  low: number;
+  high: number;
+  estimate: number | null;
+  marker: number | null;
+}) {
+  // Pad the axis so a value sitting at an edge is still visible.
+  const min = Math.min(low, marker ?? low, estimate ?? low);
+  const max = Math.max(high, marker ?? high, estimate ?? high);
+  const span = max - min || 1;
+  const pad = span * 0.06;
+  const axisMin = min - pad;
+  const axisSpan = max - min + pad * 2;
+  const pct = (v: number) => ((v - axisMin) / axisSpan) * 100;
+
+  return (
+    <div className="relative h-10">
+      <div className="absolute inset-x-0 top-3 h-2 rounded-full bg-white/5" />
+      <div
+        className="absolute top-3 h-2 rounded-full bg-blue-500/30"
+        style={{ left: `${pct(low)}%`, width: `${pct(high) - pct(low)}%` }}
+      />
+      {estimate != null && (
+        <div
+          className="absolute top-1.5 h-5 w-1 rounded bg-blue-400"
+          style={{ left: `${pct(estimate)}%` }}
+          title={`DCF estimate ${fmtCurrency(estimate)}`}
+        />
+      )}
+      {marker != null && (
+        <>
+          <div
+            className="absolute top-1.5 h-5 w-1 rounded bg-amber-400"
+            style={{ left: `${pct(marker)}%` }}
+            title={`Current price ${fmtCurrency(marker)}`}
+          />
+          <span
+            className="absolute top-8 text-[10px] text-amber-400 -translate-x-1/2 whitespace-nowrap"
+            style={{ left: `${pct(marker)}%` }}
+          >
+            price
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DCFComparison({ dcf }: { dcf: ChartData['dcf'] }) {
   if (!dcf.intrinsic_value || !dcf.current_price) return null;
 
@@ -325,9 +385,28 @@ function DCFComparison({ dcf }: { dcf: ChartData['dcf'] }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      {dcf.wacc && (
-        <p className="text-xs text-gray-500">WACC: {(dcf.wacc * 100).toFixed(2)}%</p>
+      {/* A single bar implies a precision the model does not have; the grid
+          shows how far the answer moves across the assumption range. */}
+      {dcf.value_low != null && dcf.value_high != null && (
+        <div className="pt-2">
+          <div className="flex items-baseline justify-between text-xs text-gray-400 mb-2">
+            <span>Across the WACC × terminal-growth grid</span>
+            <span className="font-mono text-gray-300">
+              {fmtCurrency(dcf.value_low)} – {fmtCurrency(dcf.value_high)}
+            </span>
+          </div>
+          <RangeBar
+            low={dcf.value_low}
+            high={dcf.value_high}
+            estimate={dcf.intrinsic_value}
+            marker={dcf.current_price}
+          />
+        </div>
       )}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
+        {dcf.wacc != null && <span>WACC: {(dcf.wacc * 100).toFixed(2)}%</span>}
+        {dcf.net_debt != null && <span>Net debt: {fmtCurrency(dcf.net_debt)}</span>}
+      </div>
     </div>
   );
 }
@@ -564,6 +643,28 @@ export default function ReportPage() {
                     <Stat label="Beta" value={fmtNum(cd.risk?.beta)} />
                     <Stat label="Risk Rating" value={cd.risk?.rating || 'N/A'} color={cd.risk?.rating === 'low' ? 'text-emerald-400' : cd.risk?.rating === 'high' ? 'text-red-400' : 'text-amber-400'} />
                   </div>
+
+                  {/* The scorecard leads: it is the reasoning behind the
+                      headline call, and it previously appeared only as text. */}
+                  {cd.recommendation && (
+                    <ChartSection
+                      title="Recommendation Scorecard"
+                      subtitle="Every factor behind the call, with its weight and drivers"
+                      id="viz-scorecard"
+                    >
+                      <RecommendationScorecard recommendation={cd.recommendation} />
+                    </ChartSection>
+                  )}
+
+                  {cd.peers && (
+                    <ChartSection
+                      title="Peer & Sector Comparison"
+                      subtitle="What comparable companies trade at"
+                      id="viz-peers"
+                    >
+                      <PeerComparison peers={cd.peers} />
+                    </ChartSection>
+                  )}
 
                   {/* Price Chart */}
                   <ChartSection title="Price History" subtitle="Historical closing prices with moving averages" id="viz-price">

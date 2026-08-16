@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
+import AppNav from '@/components/AppNav';
+import RequireAuth from '@/components/RequireAuth';
 
 interface ListSummary {
   id: string;
@@ -47,7 +49,7 @@ const THEME_COLORS: Record<string, string> = {
   'value-stocks': 'bg-teal-500/20 text-teal-400 border-teal-500/30',
 };
 
-export default function ListsPage() {
+function ListsPageContent() {
   const [lists, setLists] = useState<ListSummary[]>([]);
   const [selectedList, setSelectedList] = useState<string | null>(null);
   const [detail, setDetail] = useState<ListDetail | null>(null);
@@ -84,27 +86,9 @@ export default function ListsPage() {
 
   return (
     <div className="bg-gray-950 text-white min-h-screen">
-      {/* Navigation */}
-      <nav className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-lg sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center h-16">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold">StockAnalyzer</span>
-          </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/compare" className="text-sm text-gray-400 hover:text-white transition">Compare</Link>
-            <Link href="/screener" className="text-sm text-gray-400 hover:text-white transition">Screener</Link>
-            <Link href="/market" className="text-sm text-gray-400 hover:text-white transition">Market</Link>
-            <Link href="/dashboard" className="text-sm text-gray-400 hover:text-white transition">Dashboard</Link>
-          </div>
-        </div>
-      </nav>
+      <AppNav />
 
-      <div className="max-w-7xl mx-auto px-6 py-12">
+<div className="max-w-7xl mx-auto px-6 py-12">
         <div className="text-center mb-10">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">Stock Lists</h1>
           <p className="text-gray-400 text-lg">Curated collections of stocks by theme and strategy</p>
@@ -189,5 +173,13 @@ export default function ListsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ListsPage() {
+  return (
+    <RequireAuth>
+      <ListsPageContent />
+    </RequireAuth>
   );
 }

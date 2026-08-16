@@ -114,6 +114,8 @@ def get_dashboard_stats(
     # Unique tickers analyzed
     tickers_analyzed = list({j.ticker for j in completed})
 
+    is_premium = current_user.subscription_status == "active"
+
     return {
         "total_analyses": len(jobs),
         "completed_analyses": len(completed),
@@ -122,7 +124,11 @@ def get_dashboard_stats(
         "tickers_analyzed": tickers_analyzed,
         "watchlist_count": len(watchlist),
         "subscription_status": current_user.subscription_status,
-        "is_premium": current_user.subscription_status == "active",
+        "is_premium": is_premium,
+        # The frontend used to hardcode the cap, so the two could disagree
+        # after a config change. None means "no limit applies".
+        "analyses_today": crud.count_user_analyses_today(db, current_user.id),
+        "free_tier_daily_limit": None if is_premium else settings.FREE_TIER_DAILY_ANALYSES,
     }
 
 

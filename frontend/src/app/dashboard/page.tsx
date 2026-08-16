@@ -7,6 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
 import type { AnalysisJob, JobStatus } from '@/types';
+import AppNav from '@/components/AppNav';
+import RequireAuth from '@/components/RequireAuth';
 
 const STATUS_LABELS: Record<JobStatus, string> = {
   pending: 'Pending',
@@ -26,24 +28,27 @@ const STATUS_COLORS: Record<JobStatus, string> = {
   failed: 'bg-red-500/20 text-red-400',
 };
 
-const FREE_ANALYSIS_LIMIT = 3;
-const POLL_INTERVAL_MS = 4000;
+// Polling starts responsive and eases off, so a slow analysis does not hold a
+// request open every few seconds for minutes on end.
+const POLL_INITIAL_MS = 3000;
+const POLL_MAX_MS = 15000;
+const POLL_BACKOFF = 1.4;
+// An analysis that has not finished by now is not going to; the backend fails
+// interrupted jobs on restart, but nothing rescues a hung one mid-flight.
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const { isAuthenticated, isLoading, user, logout } = useAuth();
   const router = useRouter();
   const [ticker, setTicker] = useState('');
   const [jobs, setJobs] = useState<AnalysisJob[]>([]);
   const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const [error, setError] = useState('');
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
+  const [limits, setLimits] = useState<{ used: number; limit: number | null }>({
+    used: 0,
+    limit: null,
+  });
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch jobs on mount
   const fetchJobs = useCallback(async () => {
@@ -61,11 +66,30 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, fetchJobs]);
 
+  // The daily cap is a server setting; duplicating it here meant the two could
+  // disagree after a config change.
+  const fetchLimits = useCallback(async () => {
+    try {
+      const { data } = await api.get<{
+        total_analyses: number;
+        free_tier_daily_limit: number | null;
+        analyses_today: number;
+      }>('/dashboard/stats');
+      setLimits({ used: data.analyses_today, limit: data.free_tier_daily_limit });
+    } catch {
+      // Non-fatal: the banner is hidden rather than showing a wrong number.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) fetchLimits();
+  }, [isAuthenticated, fetchLimits]);
+
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
       }
     };
   }, []);
@@ -73,48 +97,77 @@ export default function DashboardPage() {
   const canRunAnalysis = useMemo(() => {
     if (!user) return false;
     if (user.subscription_status === 'active') return true;
-    return jobs.length < FREE_ANALYSIS_LIMIT;
-  }, [user, jobs]);
+    if (limits.limit === null) return true; // unknown limit: let the server decide
+    return limits.used < limits.limit;
+  }, [user, limits]);
 
   const isAnalyzing = activeJobId !== null;
 
   const pollJobStatus = useCallback(
     (jobId: number) => {
       setActiveJobId(jobId);
-      pollIntervalRef.current = setInterval(async () => {
+
+      const startedAt = Date.now();
+      let delay = POLL_INITIAL_MS;
+
+      const stop = () => {
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
+        setActiveJobId(null);
+      };
+
+      const tick = async () => {
         try {
-          const response = await api.get<AnalysisJob>(`/analysis/${jobId}`);
-          const job = response.data;
+          const { data: job } = await api.get<AnalysisJob>(`/analysis/${jobId}`);
 
           if (job.status === 'complete') {
-            clearInterval(pollIntervalRef.current!);
-            pollIntervalRef.current = null;
-            setActiveJobId(null);
+            stop();
             await fetchJobs();
+            await fetchLimits();
             if (job.report_id) {
               router.push(`/report/${job.report_id}`);
             } else {
-              setError('Analysis complete, but report is not available yet.');
+              setError('Analysis complete, but the report is not available yet.');
             }
-          } else if (job.status === 'failed') {
-            clearInterval(pollIntervalRef.current!);
-            pollIntervalRef.current = null;
-            setActiveJobId(null);
+            return;
+          }
+
+          if (job.status === 'failed') {
+            stop();
             await fetchJobs();
+            await fetchLimits();
             setError(
               job.error_message ||
                 'Analysis failed. Please try again with a valid ticker.'
             );
+            return;
           }
+
+          if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+            stop();
+            await fetchJobs();
+            setError(
+              'This analysis is taking longer than expected. It will keep running — ' +
+                'check the history below in a few minutes.'
+            );
+            return;
+          }
+
+          // Ease off as the wait grows rather than asking every few seconds
+          // for the whole run.
+          delay = Math.min(delay * POLL_BACKOFF, POLL_MAX_MS);
+          pollTimeoutRef.current = setTimeout(tick, delay);
         } catch {
-          clearInterval(pollIntervalRef.current!);
-          pollIntervalRef.current = null;
-          setActiveJobId(null);
+          stop();
           setError('An error occurred while checking analysis status.');
         }
-      }, POLL_INTERVAL_MS);
+      };
+
+      pollTimeoutRef.current = setTimeout(tick, delay);
     },
-    [fetchJobs, router]
+    [fetchJobs, fetchLimits, router]
   );
 
   const handleAnalysis = async (e: React.FormEvent) => {
@@ -123,8 +176,8 @@ export default function DashboardPage() {
 
     setError('');
 
-    if (!/^[A-Z]{1,5}$/.test(ticker)) {
-      setError('Please enter a valid ticker symbol (1-5 letters, e.g. AAPL).');
+    if (!/^[A-Z0-9]{1,6}([.-][A-Z0-9]{1,4})?$/.test(ticker)) {
+      setError('Please enter a valid ticker symbol (e.g. AAPL, BRK.B).');
       return;
     }
 
@@ -146,33 +199,18 @@ export default function DashboardPage() {
 
   return (
     <div className="bg-gray-950 text-white min-h-screen p-4 md:p-8">
-      {/* Header */}
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-gray-400">Welcome back, {user.email}</p>
-          </div>
-        </div>
-        <button
-          onClick={logout}
-          className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition duration-300 text-sm border border-gray-700"
-        >
-          Log Out
-        </button>
+      <div className="-mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8">
+        <AppNav />
+      </div>
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <p className="text-gray-400">Welcome back, {user.email}</p>
       </header>
 
       {/* Upgrade Banner */}
       {user.subscription_status !== 'active' && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 p-4 rounded-xl mb-8 text-center">
-          You are on the free plan ({jobs.length}/{FREE_ANALYSIS_LIMIT} analyses used).{' '}
+          You are on the free plan ({limits.used}/{limits.limit ?? '—'} analyses used today).{' '}
           <Link href="/pricing" className="font-bold underline ml-1">
             Upgrade to Premium
           </Link>
@@ -187,9 +225,9 @@ export default function DashboardPage() {
             <input
               type="text"
               value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
-              placeholder="e.g., AAPL"
-              maxLength={5}
+              onChange={(e) => setTicker(e.target.value.toUpperCase().replace(/[^A-Z0-9.-]/g, ''))}
+              placeholder="e.g., AAPL or BRK.B"
+              maxLength={11}
               className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500 transition text-white"
               required
               disabled={isAnalyzing}
@@ -261,5 +299,13 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <RequireAuth>
+      <DashboardPageContent />
+    </RequireAuth>
   );
 }

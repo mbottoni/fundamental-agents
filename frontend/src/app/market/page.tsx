@@ -1,8 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { getErrorMessage } from '@/lib/errors';
+import AppNav from '@/components/AppNav';
+import RequireAuth from '@/components/RequireAuth';
+import { PanelState } from '@/components/PageState';
 
 interface Mover {
   symbol: string;
@@ -19,59 +23,48 @@ interface SectorData {
 
 type TabKey = 'gainers' | 'losers' | 'active';
 
-export default function MarketPage() {
+function MarketPageContent() {
   const [tab, setTab] = useState<TabKey>('gainers');
   const [gainers, setGainers] = useState<Mover[]>([]);
   const [losers, setLosers] = useState<Mover[]>([]);
   const [active, setActive] = useState<Mover[]>([]);
   const [sectors, setSectors] = useState<SectorData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Failures used to be swallowed into empty arrays, so a provider outage
+  // rendered a blank page that read as "the market has no movers today".
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [g, l, a, s] = await Promise.all([
+        api.get<Mover[]>('/market/gainers'),
+        api.get<Mover[]>('/market/losers'),
+        api.get<Mover[]>('/market/most-active'),
+        api.get<SectorData[]>('/market/sector-performance'),
+      ]);
+      setGainers(g.data);
+      setLosers(l.data);
+      setActive(a.data);
+      setSectors(s.data);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Market data is unavailable right now.'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchAll() {
-      setLoading(true);
-      try {
-        const [g, l, a, s] = await Promise.all([
-          api.get<Mover[]>('/market/gainers').catch(() => ({ data: [] })),
-          api.get<Mover[]>('/market/losers').catch(() => ({ data: [] })),
-          api.get<Mover[]>('/market/most-active').catch(() => ({ data: [] })),
-          api.get<SectorData[]>('/market/sector-performance').catch(() => ({ data: [] })),
-        ]);
-        setGainers(g.data);
-        setLosers(l.data);
-        setActive(a.data);
-        setSectors(s.data);
-      } finally {
-        setLoading(false);
-      }
-    }
     fetchAll();
-  }, []);
+  }, [fetchAll]);
 
   const tabData: Record<TabKey, Mover[]> = { gainers, losers, active };
   const currentData = tabData[tab];
 
   return (
     <div className="bg-gray-950 text-white min-h-screen">
-      {/* Navigation */}
-      <nav className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-lg sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center h-16">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold">StockAnalyzer</span>
-          </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/compare" className="text-sm text-gray-400 hover:text-white transition">Compare</Link>
-            <Link href="/screener" className="text-sm text-gray-400 hover:text-white transition">Screener</Link>
-            <Link href="/lists" className="text-sm text-gray-400 hover:text-white transition">Lists</Link>
-            <Link href="/dashboard" className="text-sm text-gray-400 hover:text-white transition">Dashboard</Link>
-          </div>
-        </div>
-      </nav>
+      <AppNav />
 
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="text-center mb-10">
@@ -82,11 +75,13 @@ export default function MarketPage() {
         {/* Sector Performance */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">Sector Performance</h2>
-          {loading ? (
-            <div className="flex justify-center py-8"><div className="animate-spin h-8 w-8 border-3 border-blue-500 border-t-transparent rounded-full" /></div>
-          ) : sectors.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">Sector data unavailable</p>
-          ) : (
+          <PanelState
+            loading={loading}
+            error={error}
+            isEmpty={sectors.length === 0}
+            emptyMessage="Sector data is unavailable."
+            onRetry={fetchAll}
+          >
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {sectors.map((s) => {
                 const pct = parseFloat(s.changesPercentage);
@@ -101,7 +96,7 @@ export default function MarketPage() {
                 );
               })}
             </div>
-          )}
+          </PanelState>
         </div>
 
         {/* Market Movers Tabs */}
@@ -118,9 +113,13 @@ export default function MarketPage() {
             ))}
           </div>
 
-          {loading ? (
-            <div className="flex justify-center py-16"><div className="animate-spin h-10 w-10 border-4 border-blue-500 border-t-transparent rounded-full" /></div>
-          ) : (
+          <PanelState
+            loading={loading}
+            error={error}
+            isEmpty={currentData.length === 0}
+            emptyMessage="No movers to show right now."
+            onRetry={fetchAll}
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -159,9 +158,17 @@ export default function MarketPage() {
                 </tbody>
               </table>
             </div>
-          )}
+          </PanelState>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MarketPage() {
+  return (
+    <RequireAuth>
+      <MarketPageContent />
+    </RequireAuth>
   );
 }

@@ -195,6 +195,33 @@ class TestCompare:
         assert response.status_code == 400
 
 
+class TestDashboardStats:
+    def test_quota_is_reported_so_the_frontend_need_not_hardcode_it(
+        self, client: TestClient, auth_headers
+    ):
+        response = client.get("/api/v1/dashboard/stats", headers=auth_headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["free_tier_daily_limit"] == 3
+        assert body["analyses_today"] == 0
+
+    def test_usage_reflects_started_analyses(self, client: TestClient, auth_headers):
+        client.post("/api/v1/analysis/", json={"ticker": "AAPL"}, headers=auth_headers)
+        body = client.get("/api/v1/dashboard/stats", headers=auth_headers).json()
+        assert body["analyses_today"] == 1
+
+    def test_premium_users_have_no_limit(self, client: TestClient, auth_headers, db):
+        from app import crud
+
+        user = crud.get_user_by_email(db, "test@example.com")
+        user.subscription_status = "active"
+        db.commit()
+
+        body = client.get("/api/v1/dashboard/stats", headers=auth_headers).json()
+        assert body["free_tier_daily_limit"] is None
+        assert body["is_premium"] is True
+
+
 class TestWatchlist:
     def test_add_list_and_remove(self, client: TestClient, auth_headers):
         created = client.post(

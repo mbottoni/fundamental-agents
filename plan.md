@@ -42,20 +42,21 @@ Mark items `[x]` as they land. Each item should ship with tests and a commit.
 
 ## Phase 3 — Frontend
 
-- [ ] **3.1 Shared app shell.** Eight pages hand-roll their own header;
+- [x] **3.1 Shared app shell.** Eight pages hand-roll their own header;
   `components/ui/` is empty.
-- [ ] **3.2 `RequireAuth` wrapper.** The guard is copy-pasted into three pages
+- [x] **3.2 `RequireAuth` wrapper.** The guard is copy-pasted into three pages
   and missing from five.
-- [ ] **3.3 Recommendation scorecard UI.** `chart_data.recommendation` is
+- [x] **3.3 Recommendation scorecard UI.** `chart_data.recommendation` is
   persisted on every report and appears only as markdown text.
-- [ ] **3.4 Peer comparison UI.** Same for `chart_data.peers`.
-- [ ] **3.5 DCF sensitivity range.** `value_low`/`value_high` are in the
+- [x] **3.4 Peer comparison UI.** Same for `chart_data.peers`.
+- [x] **3.5 DCF sensitivity range.** `value_low`/`value_high` are in the
   payload; the chart draws a single bar.
-- [ ] **3.6 Error states.** `market/page.tsx` swallows every failure into an
+- [x] **3.6 Error states.** `market/page.tsx` swallows every failure into an
   empty page; market and lists have no error state at all.
-- [ ] **3.7 Free-tier limit from the API** instead of a hardcoded constant.
-- [ ] **3.8 Polling backoff and timeout.** Currently every 4s forever.
-- [ ] **3.9 Split the 767-line report page** into `components/charts/`.
+- [x] **3.7 Free-tier limit from the API** instead of a hardcoded constant.
+- [x] **3.8 Polling backoff and timeout.** Currently every 4s forever.
+- [~] **3.9 Split the report page** into `components/charts/`. Scorecard and
+  peer comparison extracted; the twelve chart components remain inline.
 
 ## Phase 4 — New features
 
