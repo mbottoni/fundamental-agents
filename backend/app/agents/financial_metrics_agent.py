@@ -43,6 +43,11 @@ TTM_RATIO_OVERLAY: dict[tuple[str, str], str] = {
     ("dividends", "payout_ratio"): "dividendPayoutRatioTTM",
 }
 
+# Metrics where the provider reports 0 to mean "not applicable" rather than
+# "the worst possible value". A company with no interest expense has undefined
+# interest coverage, not zero coverage.
+ZERO_MEANS_UNAVAILABLE = {"interest_coverage"}
+
 TTM_KEY_METRIC_OVERLAY: dict[tuple[str, str], str] = {
     ("valuation", "ev_ebitda"): "evToEBITDATTM",
     ("profitability", "roe"): "returnOnEquityTTM",
@@ -357,10 +362,14 @@ class FinancialMetricsAgent:
                 if value is None or group_name not in groups:
                     continue
                 try:
-                    groups[group_name][metric_key] = float(value)
-                    applied.append(metric_key)
+                    value = float(value)
                 except (TypeError, ValueError):
                     continue
+                if value == 0 and metric_key in ZERO_MEANS_UNAVAILABLE:
+                    groups[group_name][metric_key] = None
+                    continue
+                groups[group_name][metric_key] = value
+                applied.append(metric_key)
         return applied
 
     # ── main entry point ──────────────────────────────────────

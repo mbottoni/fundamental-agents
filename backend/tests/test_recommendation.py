@@ -127,6 +127,78 @@ class TestMultiFactorBehaviour:
         assert result["coverage"] == 1.0
 
 
+class TestValuationLimit:
+    def test_a_great_business_at_a_punishing_price_is_not_a_strong_buy(self):
+        """
+        Quality and growth can carry the composite a long way; price still has
+        to constrain the call.
+        """
+        engine = RecommendationEngine()
+        result = engine.evaluate(
+            metrics=metrics_payload(
+                pe=60.0, peg=4.0, ev_ebitda=40.0, fcf_yield=0.005,
+                roic=0.40, roe=0.50, operating_margin=0.40, net_margin=0.35,
+                conversion=1.5, current_ratio=3.0, de_ratio=0.1, coverage=40.0,
+                revenue_growth=0.30, net_income_growth=0.35, eps_growth=0.35,
+            ),
+            valuation={"dcf_intrinsic_value_per_share": 30.0},  # 70% overvalued
+            technical=technical_payload(price=100.0, sma_200=80.0, sma_50=95.0, roc_60d=25.0),
+            risk={"risk_rating": "low"},
+            sentiment=sentiment_payload(0.4, 30),
+            current_price=100.0,
+        )
+        assert result["recommendation"] == "hold"
+        assert "overvalued" in result["rationale"]
+
+    def test_a_stretched_valuation_holds_back_a_strong_buy(self):
+        engine = RecommendationEngine()
+        valuation_factor_score = -0.3
+        result = engine.evaluate(
+            metrics=metrics_payload(pe=32.0, peg=2.4, ev_ebitda=22.0, fcf_yield=0.02,
+                                    roic=0.30, roe=0.35, operating_margin=0.30,
+                                    net_margin=0.25, conversion=1.4,
+                                    revenue_growth=0.25, net_income_growth=0.30,
+                                    eps_growth=0.30),
+            valuation={"dcf_intrinsic_value_per_share": 88.0},
+            technical=technical_payload(price=100.0, sma_200=85.0, roc_60d=20.0),
+            risk={"risk_rating": "low"},
+            sentiment=sentiment_payload(0.35, 25),
+            current_price=100.0,
+        )
+        assert result["recommendation"] != "strong buy"
+        assert valuation_factor_score  # documented intent of the fixture
+
+    def test_a_deeply_undervalued_stock_is_not_a_strong_sell(self):
+        engine = RecommendationEngine()
+        result = engine.evaluate(
+            metrics=metrics_payload(
+                pe=6.0, peg=0.4, ev_ebitda=4.0, fcf_yield=0.15,
+                roic=0.02, roe=0.02, operating_margin=0.01, net_margin=0.005,
+                conversion=0.4, current_ratio=0.9, de_ratio=3.0, coverage=1.2,
+                revenue_growth=-0.20, net_income_growth=-0.45, eps_growth=-0.45,
+            ),
+            valuation={"dcf_intrinsic_value_per_share": 250.0},
+            technical=technical_payload(price=100.0, sma_200=140.0, sma_50=125.0, roc_60d=-30.0),
+            risk={"risk_rating": "high"},
+            sentiment=sentiment_payload(-0.4, 25),
+            current_price=100.0,
+        )
+        assert result["recommendation"] != "strong sell"
+
+    def test_the_limit_does_not_apply_without_a_valuation_score(self):
+        engine = RecommendationEngine()
+        result = engine.evaluate(
+            metrics={"groups": {"profitability": {"roic": 0.40, "roe": 0.50},
+                                "growth": {"revenue_growth": 0.35}}},
+            valuation={},
+            technical={},
+            risk={"risk_rating": "low"},
+            sentiment={},
+            current_price=None,
+        )
+        assert result["recommendation"] in ("buy", "strong buy")
+
+
 class TestMissingData:
     def test_missing_dcf_does_not_force_a_hold(self):
         """

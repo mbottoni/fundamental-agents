@@ -69,6 +69,13 @@ class RecommendationEngine:
     # A sentiment read on a handful of articles is noise.
     MIN_ARTICLES_FOR_SENTIMENT = 5
 
+    # However good a business is, price still constrains the call: no "strong
+    # buy" on something the valuation work says is badly overpriced, and no
+    # "strong sell" on something it says is deeply discounted.
+    VALUATION_VETO_THRESHOLD = -0.50
+    VALUATION_CAUTION_THRESHOLD = -0.25
+    RANK = ["strong sell", "sell", "hold", "buy", "strong buy"]
+
     # ── scoring helpers ───────────────────────────────────────
 
     @staticmethod
@@ -278,7 +285,9 @@ class RecommendationEngine:
             return
 
         compound = sentiment.get("average_sentiment_compound")
-        factor.score = self._scale(compound, -0.25, 0.25)
+        # Wide anchors: a full mark should take uniformly strong coverage, not
+        # a couple of upbeat headlines.
+        factor.score = self._scale(compound, -0.35, 0.35)
         if compound is not None:
             factor.drivers.append(
                 f"average sentiment {compound:+.2f} across {analyzed} articles"
@@ -328,6 +337,39 @@ class RecommendationEngine:
         if composite <= self.SELL_THRESHOLD:
             return "sell"
         return "hold"
+
+    def _apply_valuation_limit(
+        self, recommendation: str, valuation: Factor
+    ) -> tuple[str, Optional[str]]:
+        """
+        Constrain the call by what the stock costs.
+
+        Quality and growth can carry a composite score a long way, but a
+        wonderful business at a punishing price is not a strong buy — and a
+        struggling one trading far below its intrinsic value is not a strong
+        sell. Returns the (possibly capped) call and a note explaining any cap.
+        """
+        if not valuation.available:
+            return recommendation, None
+
+        score = valuation.score
+        current = self.RANK.index(recommendation)
+
+        if score <= self.VALUATION_VETO_THRESHOLD:
+            ceiling = self.RANK.index("hold")
+            if current > ceiling:
+                return "hold", "capped at hold because the stock looks materially overvalued"
+        elif score <= self.VALUATION_CAUTION_THRESHOLD:
+            ceiling = self.RANK.index("buy")
+            if current > ceiling:
+                return "buy", "held back from strong buy by a stretched valuation"
+
+        if score >= -self.VALUATION_VETO_THRESHOLD:
+            floor = self.RANK.index("hold")
+            if current < floor:
+                return "hold", "lifted to hold because the stock looks materially undervalued"
+
+        return recommendation, None
 
     def _rationale(self, factors: list[Factor], composite: float) -> str:
         """Name the factors that actually moved the result."""
@@ -414,14 +456,20 @@ class RecommendationEngine:
         coverage = available_weight / sum(self.WEIGHTS.values())
 
         recommendation = self._classify(composite)
+        recommendation, limit_note = self._apply_valuation_limit(
+            recommendation, by_key["valuation"],
+        )
         confidence = self._confidence(
             factors, composite, coverage, risk.get("risk_rating", "unknown"),
         )
         rationale = self._rationale(available, composite)
+        if limit_note:
+            rationale = f"{rationale}; {limit_note}"
 
         logger.info(
-            "Recommendation: %s (score %.3f, confidence %d%%, coverage %.0f%%)",
+            "Recommendation: %s (score %.3f, confidence %d%%, coverage %.0f%%)%s",
             recommendation, composite, confidence, coverage * 100,
+            f" [{limit_note}]" if limit_note else "",
         )
 
         return {

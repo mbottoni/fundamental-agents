@@ -255,7 +255,9 @@ class DataGatheringAgent:
 
     def get_dividend_history(self, ticker: str) -> list[dict]:
         """Fetch historical dividend payouts."""
-        data = self._fmp_get("historical-price-eod/dividend", {"symbol": ticker})
+        # The /stable API serves these from `dividends`; the old
+        # historical-price-eod/dividend path 404s.
+        data = self._fmp_get("dividends", {"symbol": ticker})
         if isinstance(data, list):
             return data[:20]  # last 20 dividends
         return []

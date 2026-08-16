@@ -91,6 +91,25 @@ class TestTTMOverlay:
         )
         assert result["groups"]["valuation"]["pe_ratio"] == 10.0
 
+    def test_zero_interest_coverage_is_treated_as_not_applicable(self):
+        """
+        FMP reports 0 coverage for companies with no interest expense. Scored
+        literally that reads as "cannot service its debt" for a debt-light
+        business.
+        """
+        result = FinancialMetricsAgent().run(
+            raw_data(ttm={"ratios": {"interestCoverageRatioTTM": 0}})
+        )
+        assert result["groups"]["leverage"]["interest_coverage"] is None
+        assert "interest_coverage" not in result["ttm_metrics"]
+
+    def test_negative_interest_coverage_is_kept(self):
+        """Negative coverage is a real distress signal, not a missing value."""
+        result = FinancialMetricsAgent().run(
+            raw_data(ttm={"ratios": {"interestCoverageRatioTTM": -3.5}})
+        )
+        assert result["groups"]["leverage"]["interest_coverage"] == -3.5
+
     def test_ttm_values_are_rounded_like_computed_ones(self):
         result = FinancialMetricsAgent().run(
             raw_data(ttm={"ratios": {"priceToEarningsRatioTTM": 34.9235159817}})
