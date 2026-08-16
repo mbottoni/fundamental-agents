@@ -6,3 +6,4 @@ from ..models.analysis_job import AnalysisJob
 from ..models.report import Report
 from ..models.watchlist import WatchlistItem
 from ..models.analysis_snapshot import AnalysisSnapshot
+from ..models.alert import Alert

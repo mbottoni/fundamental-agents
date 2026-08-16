@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import api from '@/lib/api';
 
 /**
  * The application's navigation bar.
@@ -19,6 +20,10 @@ const NAV_LINKS = [
   { href: '/compare', label: 'Compare' },
   { href: '/lists', label: 'Lists' },
 ];
+
+// How often the badge refreshes. The sweep itself runs server-side; this is
+// just how quickly the count catches up.
+const UNREAD_POLL_MS = 120_000;
 
 export function Logo() {
   return (
@@ -41,6 +46,23 @@ export function Logo() {
 export default function AppNav() {
   const pathname = usePathname();
   const { isAuthenticated, user, logout } = useAuth();
+  const [unread, setUnread] = useState(0);
+
+  const fetchUnread = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ unread_count: number }>('/alerts/?unread_only=true');
+      setUnread(data.unread_count);
+    } catch {
+      // The badge is decoration; a failure here should not disrupt navigation.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchUnread();
+    const timer = setInterval(fetchUnread, UNREAD_POLL_MS);
+    return () => clearInterval(timer);
+  }, [isAuthenticated, fetchUnread]);
 
   return (
     <nav className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-lg sticky top-0 z-50">
@@ -69,6 +91,17 @@ export default function AppNav() {
         <div className="flex items-center gap-4">
           {isAuthenticated ? (
             <>
+              <Link
+                href="/alerts"
+                className="relative text-sm text-gray-400 hover:text-white transition"
+              >
+                Alerts
+                {unread > 0 && (
+                  <span className="absolute -top-2 -right-3 bg-blue-600 text-white text-[10px] font-bold rounded-full min-w-[1.1rem] h-[1.1rem] px-1 flex items-center justify-center">
+                    {unread > 9 ? '9+' : unread}
+                  </span>
+                )}
+              </Link>
               {user?.subscription_status !== 'active' && (
                 <Link
                   href="/pricing"

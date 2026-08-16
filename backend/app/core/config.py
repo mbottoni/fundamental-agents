@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # A repeat analysis of the same ticker within this window returns the
     # existing report instead of re-running the pipeline.
     ANALYSIS_REUSE_HOURS: int = 12
+    # How often the watchlist sweep runs, in minutes. 0 disables it, which is
+    # what you want if alerts are driven by an external scheduler instead.
+    ALERT_SWEEP_MINUTES: int = 60
 
     # --- Email (optional - logs tokens to console when unset) ---
     SMTP_HOST: str = ""

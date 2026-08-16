@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api.v1 import (
+    endpoints_alerts,
     endpoints_analysis,
     endpoints_auth,
     endpoints_chart,
@@ -134,6 +135,44 @@ def _reap_interrupted_jobs() -> None:
         db.close()
 
 
+async def _watchlist_sweep() -> None:
+    """
+    Evaluate every watchlist on a timer.
+
+    Analyses run in-process and there is no scheduler, so this is a plain
+    asyncio task. It runs the blocking evaluation in a worker thread to keep
+    the event loop free, and never lets an error end the loop.
+    """
+    import asyncio
+
+    interval = settings.ALERT_SWEEP_MINUTES * 60
+    if interval <= 0:
+        logger.info("Watchlist alert sweep disabled (ALERT_SWEEP_MINUTES=0).")
+        return
+
+    from .core.db import SessionLocal
+    from .services.alerts import evaluate_alerts
+
+    def sweep() -> int:
+        db = SessionLocal()
+        try:
+            return len(evaluate_alerts(db))
+        finally:
+            db.close()
+
+    logger.info("Watchlist alert sweep every %d minute(s).", settings.ALERT_SWEEP_MINUTES)
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            created = await asyncio.to_thread(sweep)
+            if created:
+                logger.info("Watchlist sweep raised %d alert(s).", created)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - a bad sweep must not stop the rest
+            logger.error("Watchlist sweep failed: %s", e, exc_info=True)
+
+
 # ── Lifespan ──────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -143,8 +182,15 @@ async def lifespan(app: FastAPI):
     logger.info("Database tables verified.")
     _run_auto_migrations()
     _reap_interrupted_jobs()
+
+    import asyncio
+
+    sweep_task = asyncio.create_task(_watchlist_sweep())
+
     yield
+
     logger.info("Shutting down Stock Analyzer AI...")
+    sweep_task.cancel()
     engine.dispose()
     logger.info("Database connections closed.")
 
@@ -192,6 +238,7 @@ app.include_router(endpoints_screener.router, prefix="/api/v1/screener", tags=["
 app.include_router(endpoints_chart.router, prefix="/api/v1/chart", tags=["Chart"])
 app.include_router(endpoints_market.router, prefix="/api/v1/market", tags=["Market"])
 app.include_router(endpoints_history.router, prefix="/api/v1/history", tags=["History"])
+app.include_router(endpoints_alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
 
 
 # ── Root & Health ─────────────────────────────────────────────

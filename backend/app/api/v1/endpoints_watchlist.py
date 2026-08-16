@@ -40,13 +40,13 @@ def update_watchlist_item(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Update notes on a watchlist item."""
+    """Update notes or the price target on a watchlist item."""
     db_item = crud.get_watchlist_item(db, item_id)
     if not db_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found.")
     if db_item.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your item.")
-    return crud.update_watchlist_item(db, item_id=item_id, notes=update.notes)
+    return crud.update_watchlist_item(db, item_id=item_id, updates=update)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

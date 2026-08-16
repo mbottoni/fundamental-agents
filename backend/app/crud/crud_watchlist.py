@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..core.config import logger
 from ..models.watchlist import WatchlistItem
-from ..schemas.watchlist import WatchlistItemCreate
+from ..schemas.watchlist import WatchlistItemCreate, WatchlistItemUpdate
 
 
 def get_user_watchlist(db: Session, user_id: int) -> list[WatchlistItem]:
@@ -41,6 +41,8 @@ def add_to_watchlist(
         user_id=user_id,
         ticker=item.ticker.upper(),
         notes=item.notes,
+        target_price=item.target_price,
+        target_direction=item.target_direction,
     )
     db.add(db_item)
     db.commit()
@@ -50,13 +52,21 @@ def add_to_watchlist(
 
 
 def update_watchlist_item(
-    db: Session, item_id: int, notes: Optional[str]
+    db: Session, item_id: int, updates: "WatchlistItemUpdate"
 ) -> Optional[WatchlistItem]:
-    """Update notes on a watchlist item."""
+    """
+    Apply a partial update to a watchlist item.
+
+    Only fields present in the request are touched, so clearing notes does not
+    silently drop a price target.
+    """
     db_item = get_watchlist_item(db, item_id)
     if not db_item:
         return None
-    db_item.notes = notes
+
+    for field, value in updates.model_dump(exclude_unset=True).items():
+        setattr(db_item, field, value)
+
     db.commit()
     db.refresh(db_item)
     return db_item
