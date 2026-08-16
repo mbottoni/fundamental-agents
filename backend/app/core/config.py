@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # each worker keeps its own in-process cache.
     REDIS_URL: str = ""
 
+    # --- Narrative summaries (optional) ---
+    # Unset disables the feature; reports are generated without a written
+    # summary and nothing else in the pipeline changes.
+    ANTHROPIC_API_KEY: str = ""
+
     # --- Monitoring (optional) ---
     SENTRY_DSN: str = ""
 

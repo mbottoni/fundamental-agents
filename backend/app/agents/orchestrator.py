@@ -23,6 +23,7 @@ from .. import crud, models
 from .data_gathering_agent import DataGatheringAgent
 from .earnings_agent import EarningsAgent
 from .financial_metrics_agent import FinancialMetricsAgent
+from .narrative_agent import NarrativeAgent
 from .news_sentiment_agent import NewsSentimentAgent
 from .peer_comparison_agent import PeerComparisonAgent
 from .recommendation import RecommendationEngine
@@ -58,6 +59,7 @@ class Orchestrator:
         self.valuation_agent = ValuationAgent()
         self.peer_agent = PeerComparisonAgent()
         self.earnings_agent = EarningsAgent()
+        self.narrative_agent = NarrativeAgent()
         self.recommendation_engine = RecommendationEngine()
         self.synthesis_agent = SynthesisReportingAgent()
 
@@ -296,6 +298,24 @@ class Orchestrator:
                 earnings=earnings,
             )
 
+            # ── Step 3b: Narrative summary (optional) ────────
+            narrative = None
+            if self.narrative_agent.available:
+                narrative = self.narrative_agent.run(
+                    self.narrative_agent.build_payload(
+                        ticker=self.ticker,
+                        profile=raw_data.get("profile") or {},
+                        assessment=assessment,
+                        valuation=valuation,
+                        metrics=metrics,
+                        risk=risk,
+                        peers=peers,
+                        earnings=earnings,
+                        sentiment=sentiment,
+                        current_price=prices[0].get("close") if prices else None,
+                    )
+                )
+
             # ── Step 4: Synthesize the report ────────────────
             crud.update_job_status(db, job_id=job.id, status="generating_report")
 
@@ -309,6 +329,7 @@ class Orchestrator:
                 assessment=assessment,
                 peers=peers,
                 earnings=earnings,
+                narrative=narrative,
             )
 
             # ── Step 5: Build structured chart data ──────────

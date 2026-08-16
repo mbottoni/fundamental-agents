@@ -120,6 +120,25 @@ class SynthesisReportingAgent:
 
         return "\n".join(lines)
 
+    def _section_narrative(self, narrative: Optional[str]) -> str:
+        """
+        The written summary, when one was produced.
+
+        Labelled as model-written: everything else in the report is computed,
+        and a reader is entitled to know which part is not.
+        """
+        if not narrative:
+            return ""
+
+        return "\n".join([
+            "## Summary",
+            "",
+            narrative.strip(),
+            "",
+            "*Written by an AI model from the analysis below. The figures it cites "
+            "come from that analysis; the wording is its own.*",
+        ])
+
     def _section_scorecard(self, assessment: dict) -> str:
         """The per-factor breakdown behind the recommendation."""
         lines = [
@@ -625,6 +644,7 @@ class SynthesisReportingAgent:
         assessment: Optional[dict] = None,
         peers: Optional[dict] = None,
         earnings: Optional[dict] = None,
+        narrative: Optional[str] = None,
     ) -> str:
         """Generate the final comprehensive markdown report."""
         logger.info("Generating synthesis report")
@@ -655,6 +675,7 @@ class SynthesisReportingAgent:
 
         sections = [
             self._section_header(profile, ticker, current_price),
+            self._section_narrative(narrative),
             self._section_executive_summary(
                 assessment, risk_rating, current_price, dcf_value, metrics, technical,
             ),
@@ -677,7 +698,9 @@ class SynthesisReportingAgent:
             ),
         ]
 
-        report = "\n\n".join(sections)
+        # Sections that had nothing to report return an empty string; dropping
+        # them here avoids runs of blank lines in the rendered markdown.
+        report = "\n\n".join(section for section in sections if section.strip())
         logger.info(
             "Synthesis report generated (%d characters, recommendation=%s, confidence=%d%%)",
             len(report), assessment["recommendation"], assessment["confidence"],

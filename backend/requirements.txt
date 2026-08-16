@@ -13,6 +13,9 @@ nltk>=3.8.0,<4.0.0
 stripe>=8.0.0,<10.0.0
 python-multipart>=0.0.9,<1.0.0
 python-dotenv>=1.0.0,<2.0.0
+# Optional: narrative report summaries (feature is off without an API key)
+anthropic>=0.40.0
+
 # Production readiness
 redis>=5.0.0,<6.0.0
 slowapi>=0.1.9,<1.0.0
