@@ -49,6 +49,7 @@ The **Orchestrator** coordinates specialized agents, then scores the result:
 | **Risk Assessment** | Volatility, Sharpe, Sortino, VaR and drawdown over a trailing 252-session window; beta regressed against SPY | Price history + benchmark |
 | **News Sentiment** | VADER with a financial lexicon, relevance filtering and recency weighting | News articles |
 | **Valuation** | Two-stage FCFF DCF discounted at WACC, bridged to equity value, with a WACC x terminal-growth sensitivity grid | Financial data + profile |
+| **Peer Comparison** | Multiples against the peer median and sector/industry P/E, with premium/discount and percentile rank | Financial Modeling Prep |
 | **Recommendation** | Scores six weighted factors -- valuation, quality, financial health, growth, momentum, sentiment -- into a buy/hold/sell call, capped by valuation | All agent outputs |
 | **Synthesis** | Markdown report with a scorecard showing every factor's score and drivers | All agent outputs |
 

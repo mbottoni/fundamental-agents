@@ -24,7 +24,7 @@ cd backend && pytest tests/test_auth.py::TestRegistration::test_x    # one test
 cd backend && pytest -k "free_tier"                                  # by name
 ```
 
-The agent tests (`test_valuation`, `test_risk`, `test_metrics`, `test_recommendation`, `test_sentiment`, `test_data_gathering`, `test_synthesis`) are pure and fast — no network, no database. `conftest.py` still loads the app, so they need the full dependency set installed.
+The agent tests (`test_valuation`, `test_risk`, `test_metrics`, `test_recommendation`, `test_peer_comparison`, `test_sentiment`, `test_data_gathering`, `test_synthesis`) are pure and fast — no network, no database. `conftest.py` still loads the app, so they need the full dependency set installed.
 
 Frontend checks (what CI runs — `.github/workflows/deploy.yml`):
 
@@ -59,8 +59,9 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 4. `RiskAssessmentAgent` — volatility, Sharpe/Sortino, VaR, drawdown over a trailing 252-session window, plus beta regressed against SPY
 5. `NewsSentimentAgent` — VADER with a finance lexicon, relevance filtering, and recency weighting
 6. `ValuationAgent` — two-stage FCFF DCF: discount unlevered FCF at WACC, then bridge to equity via `EV − debt + cash`. Returns a sensitivity grid, not just a point estimate
-7. `RecommendationEngine` (`recommendation.py`) — scores six weighted factors into the buy/hold/sell call; run by the orchestrator, not by an agent
-8. `SynthesisReportingAgent` — renders the markdown report from all of the above
+7. `PeerComparisonAgent` — multiples against the peer median and the sector/industry P/E snapshots. Both sides come from FMP's `ratios-ttm` so the comparison is like for like; feeds a relative valuation score into the recommendation
+8. `RecommendationEngine` (`recommendation.py`) — scores six weighted factors into the buy/hold/sell call; run by the orchestrator, not by an agent
+9. `SynthesisReportingAgent` — renders the markdown report from all of the above
 
 **Where to be careful:** the DCF must keep its equity bridge and its guard rails (negative FCF, the WACC-vs-terminal-growth spread, negative equity value) — each exists because removing it produces confident nonsense. The recommendation is capped by the valuation factor so quality and growth cannot outvote price entirely.
 
