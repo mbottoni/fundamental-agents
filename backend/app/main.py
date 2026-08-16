@@ -21,6 +21,7 @@ from .api.v1 import (
     endpoints_chart,
     endpoints_compare,
     endpoints_dashboard,
+    endpoints_history,
     endpoints_market,
     endpoints_reports,
     endpoints_screener,
@@ -97,6 +98,8 @@ def _run_auto_migrations() -> None:
         if "is_verified" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT false"))
             logger.info("Migration: added is_verified column to users.")
+
+        # analysissnapshots is created by create_all(); nothing to patch here.
 
         # analysisjobs.error_message
         job_cols = [c["name"] for c in inspector.get_columns("analysisjobs")]
@@ -188,6 +191,7 @@ app.include_router(endpoints_compare.router, prefix="/api/v1/compare", tags=["Co
 app.include_router(endpoints_screener.router, prefix="/api/v1/screener", tags=["Screener"])
 app.include_router(endpoints_chart.router, prefix="/api/v1/chart", tags=["Chart"])
 app.include_router(endpoints_market.router, prefix="/api/v1/market", tags=["Market"])
+app.include_router(endpoints_history.router, prefix="/api/v1/history", tags=["History"])
 
 
 # ── Root & Health ─────────────────────────────────────────────

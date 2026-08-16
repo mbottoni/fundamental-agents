@@ -60,12 +60,12 @@ Mark items `[x]` as they land. Each item should ship with tests and a commit.
 
 ## Phase 4 — New features
 
-- [ ] **4.1 Analysis snapshots.** Store the composite score, recommendation and
+- [x] **4.1 Analysis snapshots.** Store the composite score, recommendation and
   price at analysis time. Cheap now, impossible retroactively, and the
   precondition for 4.2 and 4.3.
-- [ ] **4.2 Score history and diffs.** How a ticker's score and call moved
+- [x] **4.2 Score history and diffs.** How a ticker's score and call moved
   between runs.
-- [ ] **4.3 Track past calls.** How earlier recommendations actually performed
+- [x] **4.3 Track past calls.** How earlier recommendations actually performed
   — what makes the confidence figure credible rather than asserted.
 - [ ] **4.4 Watchlist alerts.** The model and endpoints exist but do nothing.
   Scheduled re-analysis plus a threshold alert is the retention hook.

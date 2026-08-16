@@ -313,6 +313,24 @@ class Orchestrator:
             report = crud.create_report(
                 db, content=report_content, job_id=job.id, chart_data=chart_data,
             )
+
+            # A small structured record of the conclusion and the price it was
+            # reached at. Neither the history view nor any assessment of past
+            # calls can be reconstructed after the fact.
+            try:
+                crud.create_snapshot(
+                    db,
+                    user_id=job.user_id,
+                    job_id=job.id,
+                    ticker=self.ticker,
+                    assessment=assessment,
+                    price=prices[0].get("close") if prices else None,
+                    dcf_value=valuation.get("dcf_intrinsic_value_per_share"),
+                    risk_rating=risk.get("risk_rating"),
+                )
+            except Exception as e:  # noqa: BLE001 - never fail a finished report
+                logger.error("Could not record snapshot for job %d: %s", job.id, e)
+
             crud.update_job_status(db, job_id=job.id, status="complete")
 
             logger.info(
