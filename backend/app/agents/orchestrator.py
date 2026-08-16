@@ -21,6 +21,7 @@ from .. import crud, models
 from .data_gathering_agent import DataGatheringAgent
 from .financial_metrics_agent import FinancialMetricsAgent
 from .news_sentiment_agent import NewsSentimentAgent
+from .recommendation import RecommendationEngine
 from .risk_assessment_agent import RiskAssessmentAgent
 from .synthesis_reporting_agent import SynthesisReportingAgent
 from .technical_analysis_agent import TechnicalAnalysisAgent
@@ -47,6 +48,7 @@ class Orchestrator:
         self.risk_agent = RiskAssessmentAgent()
         self.sentiment_agent = NewsSentimentAgent()
         self.valuation_agent = ValuationAgent()
+        self.recommendation_engine = RecommendationEngine()
         self.synthesis_agent = SynthesisReportingAgent()
 
     def _build_chart_data(
@@ -57,6 +59,7 @@ class Orchestrator:
         risk: dict,
         sentiment: dict,
         valuation: dict,
+        assessment: dict,
     ) -> dict[str, Any]:
         """
         Build a structured dict for the frontend charting components.
@@ -164,6 +167,14 @@ class Orchestrator:
             "leverage": metrics.get("groups", {}).get("leverage", {}),
             "revenue_segments": self._build_revenue_segments(raw_data),
             "dividend_history": self._build_dividend_history(raw_data),
+            "recommendation": {
+                "call": assessment.get("recommendation"),
+                "composite_score": assessment.get("composite_score"),
+                "confidence": assessment.get("confidence"),
+                "rationale": assessment.get("rationale"),
+                "coverage": assessment.get("coverage"),
+                "factors": assessment.get("factors", []),
+            },
         }
 
     @staticmethod
@@ -230,7 +241,18 @@ class Orchestrator:
             sentiment = self.sentiment_agent.run(raw_data.get("news", []))
             valuation = self.valuation_agent.run(raw_data)
 
-            # ── Step 3: Synthesize the report ────────────────
+            # ── Step 3: Score the investment case ────────────
+            prices = raw_data.get("prices") or []
+            assessment = self.recommendation_engine.evaluate(
+                metrics=metrics,
+                valuation=valuation,
+                technical=technical,
+                risk=risk,
+                sentiment=sentiment,
+                current_price=prices[0].get("close") if prices else None,
+            )
+
+            # ── Step 4: Synthesize the report ────────────────
             crud.update_job_status(db, job_id=job.id, status="generating_report")
 
             report_content = self.synthesis_agent.run(
@@ -240,11 +262,12 @@ class Orchestrator:
                 valuation=valuation,
                 technical=technical,
                 risk=risk,
+                assessment=assessment,
             )
 
-            # ── Step 4: Build structured chart data ──────────
+            # ── Step 5: Build structured chart data ──────────
             chart_data = self._build_chart_data(
-                raw_data, metrics, technical, risk, sentiment, valuation,
+                raw_data, metrics, technical, risk, sentiment, valuation, assessment,
             )
 
             # ── Step 5: Save & finalize ──────────────────────

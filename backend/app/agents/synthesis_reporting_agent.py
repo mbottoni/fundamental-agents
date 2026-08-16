@@ -19,6 +19,8 @@ import logging
 from datetime import date
 from typing import Any, Optional, Union
 
+from .recommendation import RecommendationEngine
+
 logger = logging.getLogger("stock_analyzer.agents.synthesis")
 
 Number = Union[int, float]
@@ -27,11 +29,8 @@ Number = Union[int, float]
 class SynthesisReportingAgent:
     """Synthesizes all analysis results into a formatted markdown report."""
 
-    # ── recommendation thresholds (DCF upside/downside) ────────
-    STRONG_BUY_THRESHOLD = 0.25   # >25% undervalued
-    BUY_THRESHOLD = 0.10          # >10% undervalued
-    SELL_THRESHOLD = -0.10        # >10% overvalued
-    STRONG_SELL_THRESHOLD = -0.25 # >25% overvalued
+    def __init__(self, recommendation_engine: Optional[RecommendationEngine] = None) -> None:
+        self.recommendation_engine = recommendation_engine or RecommendationEngine()
 
     # ── formatters ────────────────────────────────────────────
 
@@ -75,71 +74,6 @@ class SynthesisReportingAgent:
             return f"{value:,.0f}"
         return "N/A"
 
-    # ── conclusion logic ──────────────────────────────────────
-
-    def _generate_recommendation(
-        self,
-        current_price: Optional[Number],
-        dcf_value: Optional[Number],
-        risk_rating: str,
-        rsi: Optional[float],
-        trend_signals: list[str],
-    ) -> tuple[str, str, int]:
-        """
-        Returns (recommendation, rationale, confidence_score 1-100).
-        """
-        # Start with valuation‑based recommendation
-        if not isinstance(current_price, (int, float)) or not isinstance(dcf_value, (int, float)):
-            return (
-                "hold",
-                "Insufficient data for a conclusive valuation‑based recommendation.",
-                30,
-            )
-
-        diff = (dcf_value - current_price) / current_price
-        confidence = 50
-
-        if diff > self.STRONG_BUY_THRESHOLD:
-            rec, reason = "strong buy", f"significantly undervalued by {diff:.0%}"
-            confidence = 75
-        elif diff > self.BUY_THRESHOLD:
-            rec, reason = "buy", f"undervalued by {diff:.0%}"
-            confidence = 65
-        elif diff < self.STRONG_SELL_THRESHOLD:
-            rec, reason = "strong sell", f"significantly overvalued by {-diff:.0%}"
-            confidence = 75
-        elif diff < self.SELL_THRESHOLD:
-            rec, reason = "sell", f"overvalued by {-diff:.0%}"
-            confidence = 65
-        else:
-            rec, reason = "hold", "fairly valued"
-            confidence = 55
-
-        # Adjust confidence based on risk and technicals
-        if risk_rating == "very_high":
-            confidence -= 15
-        elif risk_rating == "high":
-            confidence -= 10
-
-        bullish_signals = sum(1 for s in trend_signals if "bullish" in s.lower())
-        bearish_signals = sum(1 for s in trend_signals if "bearish" in s.lower())
-        if rec in ("buy", "strong buy") and bullish_signals > bearish_signals:
-            confidence += 10
-        elif rec in ("sell", "strong sell") and bearish_signals > bullish_signals:
-            confidence += 10
-        elif rec in ("buy", "strong buy") and bearish_signals > bullish_signals:
-            confidence -= 10
-
-        if rsi is not None:
-            if rsi > 70 and rec in ("buy", "strong buy"):
-                confidence -= 10  # overbought contradicts buy
-            elif rsi < 30 and rec in ("sell", "strong sell"):
-                confidence -= 10  # oversold contradicts sell
-
-        confidence = max(10, min(confidence, 95))
-
-        return rec, reason, confidence
-
     # ── section builders ──────────────────────────────────────
 
     def _section_header(self, profile: dict, ticker: str, current_price: Optional[Number]) -> str:
@@ -155,15 +89,22 @@ class SynthesisReportingAgent:
         ])
 
     def _section_executive_summary(
-        self, rec: str, reason: str, confidence: int, risk_rating: str,
+        self, assessment: dict, risk_rating: str,
         current_price: Optional[Number], dcf_value: Optional[Number],
         metrics: dict, technical: dict,
     ) -> str:
         lines = ["## Executive Summary", ""]
         lines.append(
-            f"**Recommendation: {rec.upper()}** (Confidence: {confidence}%)"
+            f"**Recommendation: {assessment['recommendation'].upper()}** "
+            f"(Confidence: {assessment['confidence']}%)"
         )
-        lines.append(f"- **Valuation:** The stock appears to be {reason}.")
+        lines.append(
+            f"- **Composite Score:** {assessment['composite_score']:+.2f} on a −1 to +1 scale, "
+            f"{assessment['rationale']}"
+        )
+        if isinstance(current_price, (int, float)) and isinstance(dcf_value, (int, float)):
+            upside = (dcf_value - current_price) / current_price
+            lines.append(f"- **DCF Upside:** {upside:+.0%} vs. {self._fc(current_price)}")
         lines.append(f"- **Risk Level:** {risk_rating.replace('_', ' ').title()}")
 
         rsi = technical.get("rsi")
@@ -174,6 +115,35 @@ class SynthesisReportingAgent:
         if pe is not None:
             lines.append(f"- **P/E Ratio:** {self._fr(pe)}")
 
+        # Coverage tells the reader how much of the model actually had data.
+        lines.append(f"- **Factor Coverage:** {assessment['coverage']:.0%} of the scoring model")
+
+        return "\n".join(lines)
+
+    def _section_scorecard(self, assessment: dict) -> str:
+        """The per-factor breakdown behind the recommendation."""
+        lines = [
+            "## Recommendation Scorecard",
+            "",
+            "Each factor is scored from −1 (poor) to +1 (strong). Factors without "
+            "sufficient data are excluded and their weight redistributed.",
+            "",
+            "| Factor | Weight | Score | Key Drivers |",
+            "|---|---|---|---|",
+        ]
+        for factor in assessment.get("factors", []):
+            score = factor.get("score")
+            score_cell = f"{score:+.2f}" if score is not None else "—"
+            drivers = "; ".join(factor.get("drivers") or []) or "insufficient data"
+            lines.append(
+                f"| **{factor['label']}** | {factor['weight']:.0%} | {score_cell} | {drivers} |"
+            )
+
+        lines.append("")
+        lines.append(
+            f"**Composite: {assessment['composite_score']:+.2f}** → "
+            f"**{assessment['recommendation'].upper()}**"
+        )
         return "\n".join(lines)
 
     def _sensitivity_table(self, sensitivity: dict) -> list[str]:
@@ -462,20 +432,37 @@ class SynthesisReportingAgent:
 
         return "\n".join(lines)
 
-    def _section_thesis(self, rec: str, reason: str, confidence: int,
+    def _section_thesis(self, assessment: dict, valuation: dict,
                         current_price: Optional[Number], dcf_value: Optional[Number]) -> str:
+        scored = [f for f in assessment.get("factors", []) if f.get("score") is not None]
+        names = ", ".join(f["label"].lower() for f in scored) or "no scored factors"
+
         lines = ["## Investment Thesis", ""]
         lines.append(
-            f"Based on a comprehensive analysis combining DCF valuation, relative multiples, "
-            f"technical indicators, risk metrics, and news sentiment, the recommendation is "
-            f"a **{rec.upper()}** with **{confidence}% confidence**."
+            f"Weighing {names}, the composite score is "
+            f"**{assessment['composite_score']:+.2f}**, giving a "
+            f"**{assessment['recommendation'].upper()}** with "
+            f"**{assessment['confidence']}% confidence** — {assessment['rationale']}."
         )
         if isinstance(current_price, (int, float)) and isinstance(dcf_value, (int, float)):
             diff_pct = ((dcf_value - current_price) / current_price) * 100
             direction = "upside" if diff_pct > 0 else "downside"
+            sensitivity = valuation.get("sensitivity") or {}
+            sentence = (
+                f"\nAt a current price of {self._fc(current_price)}, the DCF estimates an "
+                f"intrinsic value of {self._fc(dcf_value)}, implying "
+                f"**{abs(diff_pct):.1f}% {direction}**"
+            )
+            if sensitivity.get("low") is not None and sensitivity.get("high") is not None:
+                sentence += (
+                    f" — though across the assumption grid the model spans "
+                    f"{self._fc(sensitivity['low'])} to {self._fc(sensitivity['high'])}"
+                )
+            lines.append(sentence + ".")
+        elif valuation.get("error"):
             lines.append(
-                f"\nAt a current price of {self._fc(current_price)}, the DCF model estimates "
-                f"an intrinsic value of {self._fc(dcf_value)}, implying **{abs(diff_pct):.1f}% {direction}** potential."
+                f"\nThe DCF could not be computed ({valuation['error'].rstrip('.')}), so the "
+                "recommendation rests on the remaining factors."
             )
         return "\n".join(lines)
 
@@ -489,6 +476,7 @@ class SynthesisReportingAgent:
         valuation: dict,
         technical: dict,
         risk: dict,
+        assessment: Optional[dict] = None,
     ) -> str:
         """Generate the final comprehensive markdown report."""
         logger.info("Generating synthesis report")
@@ -502,23 +490,32 @@ class SynthesisReportingAgent:
         current_price = prices[0].get("close") if prices else None
         dcf_value = valuation.get("dcf_intrinsic_value_per_share")
         risk_rating = risk.get("risk_rating", "unknown")
-        rsi = technical.get("rsi")
-        trend_signals = technical.get("trend_signals", [])
 
-        rec, reason, confidence = self._generate_recommendation(
-            current_price, dcf_value, risk_rating, rsi, trend_signals,
-        )
+        # The orchestrator scores the case so it can also persist the
+        # scorecard; standalone callers get it computed here.
+        if assessment is None:
+            assessment = self.recommendation_engine.evaluate(
+                metrics=metrics,
+                valuation=valuation,
+                technical=technical,
+                risk=risk,
+                sentiment=sentiment,
+                current_price=current_price,
+            )
 
         sections = [
             self._section_header(profile, ticker, current_price),
-            self._section_executive_summary(rec, reason, confidence, risk_rating, current_price, dcf_value, metrics, technical),
+            self._section_executive_summary(
+                assessment, risk_rating, current_price, dcf_value, metrics, technical,
+            ),
+            self._section_scorecard(assessment),
             self._section_valuation(valuation, metrics),
             self._section_financial_health(metrics),
             self._section_growth(metrics),
             self._section_technical(technical),
             self._section_risk(risk),
             self._section_sentiment(sentiment),
-            self._section_thesis(rec, reason, confidence, current_price, dcf_value),
+            self._section_thesis(assessment, valuation, current_price, dcf_value),
             (
                 "\n---\n\n"
                 "*Disclaimer: This report is generated by an automated AI system and is for "
@@ -529,6 +526,8 @@ class SynthesisReportingAgent:
         ]
 
         report = "\n\n".join(sections)
-        logger.info("Synthesis report generated (%d characters, recommendation=%s, confidence=%d%%)",
-                     len(report), rec, confidence)
+        logger.info(
+            "Synthesis report generated (%d characters, recommendation=%s, confidence=%d%%)",
+            len(report), assessment["recommendation"], assessment["confidence"],
+        )
         return report
