@@ -241,6 +241,86 @@ class SynthesisReportingAgent:
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _relative_phrase(relative: Optional[float]) -> str:
+        """
+        Say which way a comparison runs. "(-25% vs. company)" reads as though
+        the benchmark sits below the company, when the sign means the opposite.
+        """
+        if relative is None:
+            return ""
+        if abs(relative) < 0.05:
+            return " — the company trades in line"
+        direction = "above" if relative > 0 else "below"
+        return f" — the company trades {abs(relative):.0%} {direction}"
+
+    def _section_peers(self, peers: dict) -> str:
+        """Company multiples next to the peer group and the wider sector."""
+        lines = ["## Peer & Sector Comparison", ""]
+
+        if not peers or peers.get("error"):
+            lines.append(
+                f"*{(peers or {}).get('error', 'No peer data was available for this ticker.')}*"
+            )
+            return "\n".join(lines)
+
+        peer_list = peers.get("peers") or []
+        if peer_list:
+            names = ", ".join(
+                f"{p['symbol']}" for p in peer_list if p.get("symbol")
+            )
+            lines.append(f"**Peer group ({len(peer_list)}):** {names}")
+            lines.append("")
+
+        comparisons = [c for c in peers.get("comparisons", []) if c.get("peer_median") is not None]
+        if comparisons:
+            lines.append("| Metric | Company | Peer Median | Position |")
+            lines.append("|---|---|---|---|")
+            for comparison in comparisons:
+                company = comparison.get("company")
+                # Margins read as percentages, multiples as plain numbers.
+                is_margin = "margin" in comparison["key"]
+                company_cell = (
+                    (self._fp(company) if is_margin else self._fr(company))
+                    if company is not None
+                    else "N/A"
+                )
+                median_cell = (
+                    self._fp(comparison["peer_median"])
+                    if is_margin
+                    else self._fr(comparison["peer_median"])
+                )
+                lines.append(
+                    f"| **{comparison['label']}** | {company_cell} | {median_cell} | "
+                    f"{comparison['verdict']} |"
+                )
+            lines.append("")
+
+        sector = peers.get("sector") or {}
+        sector_lines: list[str] = []
+        for scope, label_key, default_label in (
+            ("sector", "sector", "Sector"), ("industry", "industry", "Industry"),
+        ):
+            benchmark = sector.get(f"{scope}_pe")
+            if benchmark is None:
+                continue
+            label = sector.get(label_key) or default_label
+            phrase = self._relative_phrase(sector.get(f"vs_{scope}_pe"))
+            sector_lines.append(
+                f"- **{label} {scope} P/E:** {self._fr(benchmark)}{phrase}"
+            )
+        if sector_lines:
+            lines.append("### Sector Benchmarks")
+            lines.extend(sector_lines)
+            if sector.get("as_of"):
+                lines.append(f"\n*Snapshot as of {sector['as_of']}.*")
+            lines.append("")
+
+        if peers.get("summary"):
+            lines.append(peers["summary"])
+
+        return "\n".join(lines)
+
     def _section_financial_health(self, metrics: dict) -> str:
         groups = metrics.get("groups", {})
         lines = ["## Financial Health", ""]
@@ -505,6 +585,7 @@ class SynthesisReportingAgent:
         technical: dict,
         risk: dict,
         assessment: Optional[dict] = None,
+        peers: Optional[dict] = None,
     ) -> str:
         """Generate the final comprehensive markdown report."""
         logger.info("Generating synthesis report")
@@ -529,6 +610,7 @@ class SynthesisReportingAgent:
                 risk=risk,
                 sentiment=sentiment,
                 current_price=current_price,
+                peers=peers,
             )
 
         sections = [
@@ -538,6 +620,7 @@ class SynthesisReportingAgent:
             ),
             self._section_scorecard(assessment),
             self._section_valuation(valuation, metrics),
+            self._section_peers(peers or {}),
             self._section_financial_health(metrics),
             self._section_growth(metrics),
             self._section_technical(technical),

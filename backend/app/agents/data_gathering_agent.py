@@ -97,6 +97,13 @@ class DataGatheringAgent:
     BACKOFF_BASE_SECONDS = 0.5
     MAX_WORKERS = 8
 
+    # Peer ratios cost one request each, so the list is capped. Peers overlap
+    # heavily between companies, so the cache absorbs most of the repeat cost.
+    MAX_PEERS = 5
+    # Sector snapshots are only published for trading days; how many days back
+    # to look before giving up.
+    MAX_TRADING_DAY_LOOKBACK = 5
+
     def __init__(self, use_cache: bool = True) -> None:
         self.fmp_api_key = settings.FINANCIAL_MODELING_PREP_API_KEY
         self.news_api_key = settings.NEWS_API_KEY
@@ -253,6 +260,97 @@ class DataGatheringAgent:
             "key_metrics": key_metrics[0] if isinstance(key_metrics, list) and key_metrics else {},
         }
 
+    def get_peers(self, ticker: str) -> list[dict]:
+        """
+        Fetch comparable companies.
+
+        A multiple only means something next to the multiples of similar
+        businesses, so this is what makes the relative valuation possible.
+        """
+        data = self._fmp_get("stock-peers", {"symbol": ticker}, ttl=PROFILE_TTL)
+        if not isinstance(data, list):
+            return []
+        peers = [p for p in data if isinstance(p, dict) and p.get("symbol")]
+        return peers[: self.MAX_PEERS]
+
+    def get_peer_ratios(self, symbols: list[str]) -> dict[str, dict]:
+        """
+        Fetch TTM ratios for each peer, concurrently.
+
+        The company itself is measured with the same endpoint, so the
+        comparison is like for like rather than provider-computed figures set
+        against ones we derived ourselves.
+        """
+        if not symbols:
+            return {}
+
+        ratios: dict[str, dict] = {}
+        with ThreadPoolExecutor(max_workers=min(len(symbols), self.MAX_WORKERS)) as pool:
+            futures = {
+                symbol: pool.submit(self._fmp_get, "ratios-ttm", {"symbol": symbol}, PROFILE_TTL)
+                for symbol in symbols
+            }
+            for symbol, future in futures.items():
+                try:
+                    payload = future.result()
+                except Exception as e:
+                    logger.warning("Peer ratios failed for %s: %s", symbol, e)
+                    continue
+                if isinstance(payload, list) and payload:
+                    ratios[symbol] = payload[0]
+        return ratios
+
+    def get_sector_valuation(
+        self, sector: Optional[str], industry: Optional[str], exchange: Optional[str]
+    ) -> dict[str, Any]:
+        """
+        Fetch sector and industry P/E snapshots.
+
+        Snapshots exist only for trading days, so recent dates are tried in
+        turn — asking for a Sunday returns an empty list.
+        """
+        if not exchange or not (sector or industry):
+            return {}
+
+        result: dict[str, Any] = {"sector": sector, "industry": industry}
+        day = date.today()
+        for _ in range(self.MAX_TRADING_DAY_LOOKBACK):
+            params = {"date": day.isoformat(), "exchange": exchange}
+            sector_rows = (
+                self._fmp_get("sector-pe-snapshot", {**params, "sector": sector}, ttl=PROFILE_TTL)
+                if sector
+                else None
+            )
+            industry_rows = (
+                self._fmp_get(
+                    "industry-pe-snapshot", {**params, "industry": industry}, ttl=PROFILE_TTL
+                )
+                if industry
+                else None
+            )
+
+            sector_pe = self._first_pe(sector_rows)
+            industry_pe = self._first_pe(industry_rows)
+            if sector_pe is not None or industry_pe is not None:
+                result.update(
+                    {"sector_pe": sector_pe, "industry_pe": industry_pe, "date": day.isoformat()}
+                )
+                return result
+            day -= timedelta(days=1)
+
+        logger.info("No sector or industry P/E snapshot found for %s", exchange)
+        return result
+
+    @staticmethod
+    def _first_pe(rows: Any) -> Optional[float]:
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            try:
+                pe = rows[0].get("pe")
+                return float(pe) if pe is not None else None
+            except (TypeError, ValueError):
+                return None
+        return None
+
     def get_dividend_history(self, ticker: str) -> list[dict]:
         """Fetch historical dividend payouts."""
         # The /stable API serves these from `dividends`; the old
@@ -292,6 +390,12 @@ class DataGatheringAgent:
             ),
             "dividend_history": lambda: self.get_dividend_history(ticker),
             "ttm": lambda: self.get_ttm_metrics(ticker),
+            "peers": lambda: self.get_peers(ticker),
+            "sector_valuation": lambda: self.get_sector_valuation(
+                (profile or {}).get("sector"),
+                (profile or {}).get("industry"),
+                (profile or {}).get("exchange"),
+            ),
         }
 
         results: dict[str, Any] = {}
@@ -308,9 +412,14 @@ class DataGatheringAgent:
         news = results.get("news") or []
         dividends = results.get("dividend_history") or []
 
+        # Second wave: peer ratios can only be requested once the peer list is
+        # known. Still concurrent, just necessarily after the list arrives.
+        peers = results.get("peers") or []
+        peer_ratios = self.get_peer_ratios([p["symbol"] for p in peers])
+
         logger.info(
             "Data gathering complete for %s in %.1fs: profile=%s, prices=%d, benchmark=%d, "
-            "news=%d, divs=%d",
+            "news=%d, divs=%d, peers=%d",
             ticker,
             time.monotonic() - started,
             "found" if profile else "missing",
@@ -318,6 +427,7 @@ class DataGatheringAgent:
             len(results.get("benchmark_prices") or []),
             len(news),
             len(dividends),
+            len(peer_ratios),
         )
 
         return {
@@ -337,4 +447,6 @@ class DataGatheringAgent:
             },
             "dividend_history": dividends,
             "ttm": results.get("ttm") or {},
+            "peers": {"companies": peers, "ratios": peer_ratios},
+            "sector_valuation": results.get("sector_valuation") or {},
         }

@@ -138,6 +138,72 @@ class TestReportStructure:
         assert assessment["recommendation"].upper() in report
 
 
+class TestPeerSection:
+    @pytest.fixture
+    def peers(self) -> dict:
+        return {
+            "peer_count": 3,
+            "peers": [
+                {"symbol": "AAA", "name": "AAA Corp", "market_cap": 1e11},
+                {"symbol": "BBB", "name": "BBB Corp", "market_cap": 2e11},
+                {"symbol": "CCC", "name": "CCC Corp", "market_cap": 3e11},
+            ],
+            "comparisons": [
+                {"key": "pe_ratio", "label": "P/E", "company": 35.0, "peer_median": 40.0,
+                 "premium_discount": -0.125, "percentile": 66.7, "lower_is_better": True,
+                 "verdict": "13% below the peer median"},
+                {"key": "operating_margin", "label": "Operating Margin", "company": 0.28,
+                 "peer_median": 0.30, "premium_discount": -0.067, "percentile": 33.3,
+                 "lower_is_better": False, "verdict": "in line with peers"},
+            ],
+            "sector": {"sector": "Technology", "industry": "Software", "sector_pe": 46.6,
+                       "industry_pe": 35.0, "vs_sector_pe": -0.25, "vs_industry_pe": 0.0,
+                       "as_of": "2026-08-14"},
+            "relative_valuation_score": 0.31,
+            "summary": "Against 3 peers the company trades at a discount to its peer group.",
+        }
+
+    def test_peer_table_and_benchmarks_render(self, raw_data, valuation, risk, peers):
+        report = SynthesisReportingAgent().run(
+            raw_data=raw_data, metrics=metrics_payload(), sentiment=sentiment_payload(),
+            valuation=valuation, technical=technical_payload(), risk=risk, peers=peers,
+        )
+        assert "## Peer & Sector Comparison" in report
+        assert "AAA" in report and "BBB" in report
+        assert "Peer Median" in report
+        assert "Technology sector P/E" in report
+        assert "2026-08-14" in report
+
+    def test_sector_comparison_states_which_way_it_runs(self, raw_data, valuation, risk, peers):
+        report = SynthesisReportingAgent().run(
+            raw_data=raw_data, metrics=metrics_payload(), sentiment=sentiment_payload(),
+            valuation=valuation, technical=technical_payload(), risk=risk, peers=peers,
+        )
+        # vs_sector_pe of -0.25 means the company is below the sector.
+        assert "the company trades 25% below" in report
+        # vs_industry_pe of 0.0 is in line.
+        assert "the company trades in line" in report
+
+    def test_margins_render_as_percentages(self, raw_data, valuation, risk, peers):
+        report = SynthesisReportingAgent().run(
+            raw_data=raw_data, metrics=metrics_payload(), sentiment=sentiment_payload(),
+            valuation=valuation, technical=technical_payload(), risk=risk, peers=peers,
+        )
+        assert "28.00%" in report
+
+    def test_missing_peers_are_explained(self, raw_data, valuation, risk):
+        report = SynthesisReportingAgent().run(
+            raw_data=raw_data, metrics=metrics_payload(), sentiment=sentiment_payload(),
+            valuation=valuation, technical=technical_payload(), risk=risk,
+            peers={"error": "No comparable companies were available for this ticker."},
+        )
+        assert "No comparable companies" in report
+
+    def test_report_renders_without_peer_data_at_all(self, raw_data, valuation, risk):
+        report = render(raw_data, valuation, risk)
+        assert "## Peer & Sector Comparison" in report
+
+
 class TestDegradedInputs:
     def test_renders_without_any_agent_output(self, raw_data):
         report = SynthesisReportingAgent().run(

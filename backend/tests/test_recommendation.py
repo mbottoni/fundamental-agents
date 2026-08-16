@@ -127,6 +127,75 @@ class TestMultiFactorBehaviour:
         assert result["coverage"] == 1.0
 
 
+class TestPeerRelativeValuation:
+    def test_a_discount_to_peers_lifts_the_valuation_factor(self):
+        engine = RecommendationEngine()
+        args = dict(
+            metrics=metrics_payload(pe=35.0),
+            valuation={"dcf_intrinsic_value_per_share": 100.0},
+            technical=technical_payload(),
+            risk={"risk_rating": "moderate"},
+            sentiment=sentiment_payload(),
+            current_price=100.0,
+        )
+        without = engine.evaluate(**args)
+        with_discount = engine.evaluate(
+            **args, peers={"relative_valuation_score": 0.8, "peer_count": 5}
+        )
+
+        factor = lambda r: next(f for f in r["factors"] if f["key"] == "valuation")["score"]
+        assert factor(with_discount) > factor(without)
+
+    def test_a_premium_to_peers_lowers_the_valuation_factor(self):
+        engine = RecommendationEngine()
+        args = dict(
+            metrics=metrics_payload(pe=35.0),
+            valuation={"dcf_intrinsic_value_per_share": 100.0},
+            technical=technical_payload(),
+            risk={"risk_rating": "moderate"},
+            sentiment=sentiment_payload(),
+            current_price=100.0,
+        )
+        without = engine.evaluate(**args)
+        with_premium = engine.evaluate(
+            **args, peers={"relative_valuation_score": -0.8, "peer_count": 5}
+        )
+
+        factor = lambda r: next(f for f in r["factors"] if f["key"] == "valuation")["score"]
+        assert factor(with_premium) < factor(without)
+
+    def test_a_high_multiple_in_a_high_multiple_sector_is_not_condemned(self):
+        """
+        A 35x P/E scored against fixed thresholds is "expensive"; against a
+        peer group at 40x it is not.
+        """
+        engine = RecommendationEngine()
+        result = engine.evaluate(
+            metrics=metrics_payload(pe=35.0, peg=1.8, ev_ebitda=22.0, fcf_yield=0.03),
+            valuation={},
+            technical=technical_payload(),
+            risk={"risk_rating": "moderate"},
+            sentiment=sentiment_payload(),
+            current_price=100.0,
+            peers={"relative_valuation_score": 0.35, "peer_count": 5},
+        )
+        valuation_factor = next(f for f in result["factors"] if f["key"] == "valuation")
+        assert valuation_factor["score"] > -0.25
+        assert any("peers" in d for d in valuation_factor["drivers"])
+
+    def test_absent_peer_data_changes_nothing(self):
+        engine = RecommendationEngine()
+        args = dict(
+            metrics=metrics_payload(),
+            valuation={"dcf_intrinsic_value_per_share": 110.0},
+            technical=technical_payload(),
+            risk={"risk_rating": "low"},
+            sentiment=sentiment_payload(),
+            current_price=100.0,
+        )
+        assert engine.evaluate(**args) == engine.evaluate(**args, peers={})
+
+
 class TestValuationLimit:
     def test_a_great_business_at_a_punishing_price_is_not_a_strong_buy(self):
         """

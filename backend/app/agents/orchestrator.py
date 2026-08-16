@@ -9,7 +9,9 @@ Coordinates the multi‑agent analysis pipeline:
   4. Risk Assessment     → volatility, Sharpe, Sortino, VaR, drawdown
   5. News Sentiment      → VADER compound scores on recent articles
   6. Valuation (DCF)     → intrinsic value per share
-  7. Synthesis Report    → comprehensive markdown report
+  7. Peer Comparison     → multiples against comparable companies and sector
+  8. Recommendation      → weighted factor score → buy/hold/sell
+  9. Synthesis Report    → comprehensive markdown report
 """
 
 import logging
@@ -21,6 +23,7 @@ from .. import crud, models
 from .data_gathering_agent import DataGatheringAgent
 from .financial_metrics_agent import FinancialMetricsAgent
 from .news_sentiment_agent import NewsSentimentAgent
+from .peer_comparison_agent import PeerComparisonAgent
 from .recommendation import RecommendationEngine
 from .risk_assessment_agent import RiskAssessmentAgent
 from .synthesis_reporting_agent import SynthesisReportingAgent
@@ -52,6 +55,7 @@ class Orchestrator:
         self.risk_agent = RiskAssessmentAgent()
         self.sentiment_agent = NewsSentimentAgent()
         self.valuation_agent = ValuationAgent()
+        self.peer_agent = PeerComparisonAgent()
         self.recommendation_engine = RecommendationEngine()
         self.synthesis_agent = SynthesisReportingAgent()
 
@@ -64,6 +68,7 @@ class Orchestrator:
         sentiment: dict,
         valuation: dict,
         assessment: dict,
+        peers: dict,
     ) -> dict[str, Any]:
         """
         Build a structured dict for the frontend charting components.
@@ -171,6 +176,14 @@ class Orchestrator:
             "leverage": metrics.get("groups", {}).get("leverage", {}),
             "revenue_segments": self._build_revenue_segments(raw_data),
             "dividend_history": self._build_dividend_history(raw_data),
+            "peers": {
+                "peer_count": peers.get("peer_count", 0),
+                "companies": peers.get("peers", []),
+                "comparisons": peers.get("comparisons", []),
+                "sector": peers.get("sector", {}),
+                "relative_valuation_score": peers.get("relative_valuation_score"),
+                "summary": peers.get("summary"),
+            },
             "recommendation": {
                 "call": assessment.get("recommendation"),
                 "composite_score": assessment.get("composite_score"),
@@ -263,6 +276,7 @@ class Orchestrator:
                 company_name=(raw_data.get("profile") or {}).get("companyName"),
             )
             valuation = self.valuation_agent.run(raw_data)
+            peers = self.peer_agent.run(raw_data, metrics)
 
             # ── Step 3: Score the investment case ────────────
             prices = raw_data.get("prices") or []
@@ -273,6 +287,7 @@ class Orchestrator:
                 risk=risk,
                 sentiment=sentiment,
                 current_price=prices[0].get("close") if prices else None,
+                peers=peers,
             )
 
             # ── Step 4: Synthesize the report ────────────────
@@ -286,11 +301,12 @@ class Orchestrator:
                 technical=technical,
                 risk=risk,
                 assessment=assessment,
+                peers=peers,
             )
 
             # ── Step 5: Build structured chart data ──────────
             chart_data = self._build_chart_data(
-                raw_data, metrics, technical, risk, sentiment, valuation, assessment,
+                raw_data, metrics, technical, risk, sentiment, valuation, assessment, peers,
             )
 
             # ── Step 5: Save & finalize ──────────────────────

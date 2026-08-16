@@ -180,6 +180,22 @@ export interface ChartData {
     status?: string | null;
     error?: string | null;
   };
+  peers?: {
+    peer_count: number;
+    companies: { symbol: string; name: string | null; market_cap: number | null }[];
+    comparisons: PeerComparison[];
+    sector: {
+      sector: string | null;
+      industry: string | null;
+      sector_pe: number | null;
+      industry_pe: number | null;
+      vs_sector_pe: number | null;
+      vs_industry_pe: number | null;
+      as_of: string | null;
+    };
+    relative_valuation_score: number | null;
+    summary: string | null;
+  };
   recommendation?: {
     call: string | null;
     composite_score: number | null;
@@ -195,6 +211,20 @@ export interface ChartData {
     geographic: { name: string; value: number }[];
   };
   dividend_history?: { date: string; dividend: number }[];
+}
+
+// One metric measured against the peer group. `premium_discount` is the
+// company's position relative to the peer median, so negative means cheaper
+// for a multiple and weaker for a margin — read it with `lower_is_better`.
+export interface PeerComparison {
+  key: string;
+  label: string;
+  company: number | null;
+  peer_median: number | null;
+  premium_discount: number | null;
+  percentile: number | null;
+  lower_is_better: boolean;
+  verdict: string;
 }
 
 // One scored dimension of the recommendation, as produced by the backend

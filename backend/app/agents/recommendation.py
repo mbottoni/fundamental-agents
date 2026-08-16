@@ -119,7 +119,12 @@ class RecommendationEngine:
     # ── individual factors ────────────────────────────────────
 
     def _score_valuation(
-        self, factor: Factor, metrics: dict, valuation: dict, current_price: Optional[Number]
+        self,
+        factor: Factor,
+        metrics: dict,
+        valuation: dict,
+        current_price: Optional[Number],
+        peers: Optional[dict] = None,
     ) -> None:
         groups = metrics.get("groups", {})
         multiples = groups.get("valuation", {})
@@ -131,15 +136,25 @@ class RecommendationEngine:
         dcf = valuation.get("dcf_intrinsic_value_per_share")
         if dcf is not None and current_price:
             upside = (dcf - current_price) / current_price
-            components.append((self._scale(upside, -0.30, 0.30), 0.40))
+            components.append((self._scale(upside, -0.30, 0.30), 0.35))
             factor.drivers.append(f"DCF implies {upside:+.0%} vs. the current price")
+
+        # Relative valuation: absolute thresholds punish every company in a
+        # highly rated industry, so what peers trade at carries real weight.
+        relative = (peers or {}).get("relative_valuation_score")
+        if relative is not None:
+            components.append((relative, 0.25))
+            peer_count = (peers or {}).get("peer_count", 0)
+            factor.drivers.append(
+                f"{'discount' if relative > 0 else 'premium'} to {peer_count} peers"
+            )
 
         pe = multiples.get("pe_ratio")
         if pe is not None:
             # A negative P/E means the company is loss-making, which the linear
             # scale would otherwise read as extremely cheap.
             score = -0.6 if pe < 0 else self._scale(pe, 40, 10)
-            components.append((score, 0.20))
+            components.append((score, 0.15))
             factor.drivers.append(f"P/E of {pe:.1f}" if pe >= 0 else "negative earnings")
 
         peg = multiples.get("peg_ratio")
@@ -149,7 +164,7 @@ class RecommendationEngine:
 
         ev_ebitda = multiples.get("ev_ebitda")
         if ev_ebitda is not None and ev_ebitda > 0:
-            components.append((self._scale(ev_ebitda, 25, 8), 0.15))
+            components.append((self._scale(ev_ebitda, 25, 8), 0.10))
             factor.drivers.append(f"EV/EBITDA of {ev_ebitda:.1f}")
 
         fcf_yield = cash_flow.get("fcf_yield")
@@ -407,6 +422,7 @@ class RecommendationEngine:
         risk: dict,
         sentiment: dict,
         current_price: Optional[Number],
+        peers: Optional[dict] = None,
     ) -> dict[str, Any]:
         """
         Score every factor and combine them into a recommendation.
@@ -419,6 +435,7 @@ class RecommendationEngine:
         technical = technical or {}
         risk = risk or {}
         sentiment = sentiment or {}
+        peers = peers or {}
 
         factors = [
             Factor("valuation", "Valuation", self.WEIGHTS["valuation"]),
@@ -430,7 +447,7 @@ class RecommendationEngine:
         ]
         by_key = {f.key: f for f in factors}
 
-        self._score_valuation(by_key["valuation"], metrics, valuation, current_price)
+        self._score_valuation(by_key["valuation"], metrics, valuation, current_price, peers)
         self._score_quality(by_key["quality"], metrics)
         self._score_financial_health(by_key["financial_health"], metrics)
         self._score_growth(by_key["growth"], metrics)
