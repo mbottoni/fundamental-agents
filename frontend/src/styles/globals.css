@@ -133,3 +133,73 @@
     display: none !important;
   }
 }
+
+/* ── Print / Save as PDF ──────────────────────────────────────
+   The app is dark-on-dark, which prints as a wall of ink. For print the
+   report is flipped to black on white, chrome is removed, and sections are
+   kept off page breaks. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Navigation, buttons and anything marked as screen-only. */
+  nav,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  .glass-card,
+  .glass-card-strong {
+    background: #fff !important;
+    border: 1px solid #d1d5db !important;
+    backdrop-filter: none !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: #111 !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  p,
+  li,
+  td,
+  th,
+  span,
+  div {
+    color: #1f2937 !important;
+  }
+
+  .text-gradient {
+    -webkit-text-fill-color: #111 !important;
+    color: #111 !important;
+    background: none !important;
+  }
+
+  a {
+    color: #1d4ed8 !important;
+    text-decoration: none;
+  }
+
+  /* Recharts renders to SVG, which prints as-is. */
+  svg {
+    max-width: 100% !important;
+  }
+}

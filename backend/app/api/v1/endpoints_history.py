@@ -60,6 +60,62 @@ def _current_prices(tickers: list[str]) -> dict[str, Optional[float]]:
     return prices
 
 
+@router.get("/leaderboard")
+def leaderboard(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    The user's analysed tickers ranked by composite score.
+
+    Screening the whole market by our own factor model would mean running the
+    pipeline per candidate, which the provider quota does not allow. Ranking
+    what has already been analysed gives the same view of "where does this sit
+    against everything else I have looked at" for no extra requests.
+    """
+    snapshots = crud.get_user_snapshots(db, current_user.id)
+
+    # Only the most recent verdict per ticker; earlier ones are history.
+    latest: dict[str, models.AnalysisSnapshot] = {}
+    for snapshot in snapshots:  # already newest first
+        latest.setdefault(snapshot.ticker, snapshot)
+
+    ranked = sorted(
+        (s for s in latest.values() if s.composite_score is not None),
+        key=lambda s: s.composite_score,
+        reverse=True,
+    )[:limit]
+
+    prices = _current_prices([s.ticker for s in ranked])
+
+    rows = []
+    for position, snapshot in enumerate(ranked, start=1):
+        current_price = prices.get(snapshot.ticker)
+        change = (
+            round((current_price - snapshot.price) / snapshot.price, 4)
+            if current_price and snapshot.price
+            else None
+        )
+        rows.append(
+            {
+                "rank": position,
+                "ticker": snapshot.ticker,
+                "recommendation": snapshot.recommendation,
+                "composite_score": snapshot.composite_score,
+                "confidence": snapshot.confidence,
+                "risk_rating": snapshot.risk_rating,
+                "price_at_analysis": snapshot.price,
+                "current_price": current_price,
+                "change_since_pct": change,
+                "analysed_at": snapshot.created_at,
+                "job_id": snapshot.job_id,
+            }
+        )
+
+    return {"count": len(rows), "rows": rows}
+
+
 @router.get("/{ticker}")
 def ticker_history(
     ticker: str,

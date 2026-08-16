@@ -132,6 +132,49 @@ class TestTickerHistory:
         assert body["snapshots"] == []
 
 
+class TestLeaderboard:
+    def test_requires_authentication(self, client: TestClient):
+        assert client.get("/api/v1/history/leaderboard").status_code == 401
+
+    def test_tickers_are_ranked_by_score(self, client: TestClient, auth_headers, db, user):
+        record(db, user.id, ticker="AAPL", score=0.1)
+        record(db, user.id, ticker="MSFT", score=0.7)
+        record(db, user.id, ticker="TSLA", score=-0.4)
+
+        rows = client.get("/api/v1/history/leaderboard", headers=auth_headers).json()["rows"]
+        assert [r["ticker"] for r in rows] == ["MSFT", "AAPL", "TSLA"]
+        assert rows[0]["rank"] == 1
+
+    def test_only_the_latest_verdict_per_ticker_is_ranked(
+        self, client: TestClient, auth_headers, db, user
+    ):
+        record(db, user.id, ticker="AAPL", score=-0.6, age_days=40)
+        record(db, user.id, ticker="AAPL", score=0.8, age_days=1)
+
+        rows = client.get("/api/v1/history/leaderboard", headers=auth_headers).json()["rows"]
+        assert len(rows) == 1
+        assert rows[0]["composite_score"] == 0.8
+
+    def test_change_since_analysis_is_included(self, client: TestClient, auth_headers, db, user):
+        # Recorded at 100, currently quoted at 120.
+        record(db, user.id, ticker="AAPL", price=100.0)
+        row = client.get("/api/v1/history/leaderboard", headers=auth_headers).json()["rows"][0]
+        assert row["change_since_pct"] == pytest.approx(0.2)
+
+    def test_an_empty_history_is_not_an_error(self, client: TestClient, auth_headers):
+        body = client.get("/api/v1/history/leaderboard", headers=auth_headers).json()
+        assert body == {"count": 0, "rows": []}
+
+    def test_another_users_analyses_are_excluded(self, client: TestClient, auth_headers, db, user):
+        from app.schemas.user import UserCreate
+
+        other = crud.create_user(db, UserCreate(email="other@example.com", password="OtherPass123"))
+        record(db, other.id, ticker="NVDA", score=0.9)
+
+        body = client.get("/api/v1/history/leaderboard", headers=auth_headers).json()
+        assert body["count"] == 0
+
+
 class TestCallPerformance:
     def test_requires_authentication(self, client: TestClient):
         assert client.get("/api/v1/history/").status_code == 401
