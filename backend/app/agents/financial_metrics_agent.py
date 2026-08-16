@@ -8,9 +8,14 @@ Profitability:    Gross Margin, Operating Margin, Net Margin, ROE, ROA, ROIC
 Liquidity:        Current Ratio, Quick Ratio
 Leverage:         D/E Ratio, Interest Coverage
 Efficiency:       Asset Turnover, Inventory Turnover
-Growth:           Revenue Growth, Net Income Growth, EPS Growth
+Growth:           Revenue Growth, Net Income Growth, EPS Growth, 3y CAGRs
 Cash Flow:        FCF Yield, FCF per Share, Operating CF / Net Income
 Dividends:        Dividend Yield, Payout Ratio
+
+Everything is computed from the annual statements, then overlaid with
+trailing-twelve-month figures wherever the provider supplies them. The latest
+annual filing can be fifteen months old, which is long enough for a P/E built
+on it to describe a company that no longer exists.
 """
 
 import logging
@@ -19,10 +24,36 @@ from typing import Any, Optional
 logger = logging.getLogger("stock_analyzer.agents.financial_metrics")
 
 
+# (metric group, metric key) → field on the TTM payload it can be replaced by.
+TTM_RATIO_OVERLAY: dict[tuple[str, str], str] = {
+    ("valuation", "pe_ratio"): "priceToEarningsRatioTTM",
+    ("valuation", "pb_ratio"): "priceToBookRatioTTM",
+    ("valuation", "ps_ratio"): "priceToSalesRatioTTM",
+    ("valuation", "peg_ratio"): "priceToEarningsGrowthRatioTTM",
+    ("profitability", "gross_margin"): "grossProfitMarginTTM",
+    ("profitability", "operating_margin"): "operatingProfitMarginTTM",
+    ("profitability", "net_margin"): "netProfitMarginTTM",
+    ("liquidity", "current_ratio"): "currentRatioTTM",
+    ("liquidity", "quick_ratio"): "quickRatioTTM",
+    ("leverage", "de_ratio"): "debtToEquityRatioTTM",
+    ("leverage", "interest_coverage"): "interestCoverageRatioTTM",
+    ("efficiency", "asset_turnover"): "assetTurnoverTTM",
+    ("efficiency", "inventory_turnover"): "inventoryTurnoverTTM",
+    ("dividends", "dividend_yield"): "dividendYieldTTM",
+    ("dividends", "payout_ratio"): "dividendPayoutRatioTTM",
+}
+
+TTM_KEY_METRIC_OVERLAY: dict[tuple[str, str], str] = {
+    ("valuation", "ev_ebitda"): "evToEBITDATTM",
+    ("profitability", "roe"): "returnOnEquityTTM",
+    ("profitability", "roa"): "returnOnAssetsTTM",
+    ("profitability", "roic"): "returnOnInvestedCapitalTTM",
+    ("cash_flow", "fcf_yield"): "freeCashFlowYieldTTM",
+}
+
+
 class FinancialMetricsAgent:
     """Calculates comprehensive financial metrics from raw data."""
-
-    # ── helpers ────────────────────────────────────────────────
 
     # ── helpers ────────────────────────────────────────────────
 
@@ -97,12 +128,14 @@ class FinancialMetricsAgent:
         eps_growth = self._growth_rate(eps_current, eps_prev)
         peg = self._safe_divide(pe, (eps_growth * 100) if eps_growth else None)
 
+        # Rounding happens after the TTM overlay in run(); returning raw values
+        # also avoids the `if value` idiom discarding a legitimate zero.
         return {
-            "pe_ratio": round(pe, 2) if pe else None,
-            "pb_ratio": round(pb, 2) if pb else None,
-            "ps_ratio": round(ps, 2) if ps else None,
-            "ev_ebitda": round(ev_ebitda, 2) if ev_ebitda else None,
-            "peg_ratio": round(peg, 2) if peg else None,
+            "pe_ratio": pe,
+            "pb_ratio": pb,
+            "ps_ratio": ps,
+            "ev_ebitda": ev_ebitda,
+            "peg_ratio": peg,
         }
 
     # ── profitability ─────────────────────────────────────────
@@ -136,7 +169,7 @@ class FinancialMetricsAgent:
             "net_margin": self._safe_divide(net_income, revenue),
             "roe": self._safe_divide(net_income, equity),
             "roa": self._safe_divide(net_income, total_assets),
-            "roic": round(roic, 4) if roic else None,
+            "roic": roic,
         }
 
     # ── liquidity ─────────────────────────────────────────────
@@ -159,7 +192,12 @@ class FinancialMetricsAgent:
         self, balance: list[dict], income: list[dict]
     ) -> dict[str, Optional[float]]:
         total_debt = self._get_latest(balance, "totalDebt")
-        equity = self._get_latest(balance, "totalEquity")
+        # Every other calculation uses totalStockholdersEquity; using
+        # totalEquity here made debt-to-equity inconsistent with book value and
+        # ROE for any company with minority interests.
+        equity = self._get_latest(balance, "totalStockholdersEquity")
+        if equity is None:
+            equity = self._get_latest(balance, "totalEquity")
         interest_expense = self._get_latest(income, "interestExpense") or 0
         operating_income = self._get_latest(income, "operatingIncome")
 
@@ -185,6 +223,25 @@ class FinancialMetricsAgent:
 
     # ── growth ────────────────────────────────────────────────
 
+    def _cagr(self, income: list[dict], key: str, years: int = 3) -> Optional[float]:
+        """
+        Compound annual growth over `years`, which says far more about a
+        business than a single year-over-year figure that one weak quarter or
+        one-off charge can dominate.
+        """
+        latest = self._get_latest(income, key)
+        earliest = self._get_prev(income, key, offset=years)
+        try:
+            if latest is None or earliest is None:
+                return None
+            latest, earliest = float(latest), float(earliest)
+            # A sign change makes a compound rate meaningless.
+            if earliest <= 0 or latest <= 0:
+                return None
+            return (latest / earliest) ** (1 / years) - 1
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+
     def _growth_metrics(self, income: list[dict]) -> dict[str, Optional[float]]:
         return {
             "revenue_growth": self._growth_rate(
@@ -199,6 +256,9 @@ class FinancialMetricsAgent:
                 self._get_latest(income, "eps"),
                 self._get_prev(income, "eps"),
             ),
+            "revenue_cagr_3y": self._cagr(income, "revenue"),
+            "net_income_cagr_3y": self._cagr(income, "netIncome"),
+            "eps_cagr_3y": self._cagr(income, "eps"),
         }
 
     # ── cash flow ─────────────────────────────────────────────
@@ -223,21 +283,85 @@ class FinancialMetricsAgent:
 
     # ── dividends ─────────────────────────────────────────────
 
+    @staticmethod
+    def _trailing_dividends(dividend_history: list[dict]) -> Optional[float]:
+        """
+        Sum the dividends actually paid over the last twelve months.
+
+        The profile's `lastDividend` is a single declared payment, so dividing
+        it by the price understates the yield of any quarterly payer.
+        """
+        if not dividend_history:
+            return None
+        from datetime import date, timedelta
+
+        cutoff = (date.today() - timedelta(days=365)).isoformat()
+        total = 0.0
+        found = False
+        for payment in dividend_history:
+            payment_date = payment.get("date")
+            amount = payment.get("dividend")
+            if not payment_date or amount is None or str(payment_date) < cutoff:
+                continue
+            try:
+                total += float(amount)
+                found = True
+            except (TypeError, ValueError):
+                continue
+        return total if found else None
+
     def _dividend_metrics(
-        self, cash_flow: list[dict], income: list[dict], profile: Optional[dict]
+        self,
+        cash_flow: list[dict],
+        income: list[dict],
+        profile: Optional[dict],
+        dividend_history: Optional[list[dict]] = None,
     ) -> dict[str, Optional[float]]:
         dividends_paid = abs(self._get_latest(cash_flow, "commonDividendsPaid") or 0)
         net_income = self._get_latest(income, "netIncome")
-        last_dividend = (profile or {}).get("lastDividend")
         current_price = (profile or {}).get("price")
 
+        trailing = self._trailing_dividends(dividend_history or [])
+        annual_dividend = trailing if trailing is not None else (profile or {}).get("lastDividend")
+
         payout_ratio = self._safe_divide(dividends_paid, net_income) if dividends_paid else None
-        dividend_yield = self._safe_divide(last_dividend, current_price) if last_dividend else None
+        dividend_yield = (
+            self._safe_divide(annual_dividend, current_price) if annual_dividend else None
+        )
 
         return {
             "dividend_yield": dividend_yield,
             "payout_ratio": payout_ratio,
         }
+
+    # ── trailing twelve months ────────────────────────────────
+
+    def _apply_ttm_overlay(self, groups: dict[str, dict], ttm: dict) -> list[str]:
+        """
+        Replace annual figures with trailing-twelve-month ones where available.
+
+        Returns the metric keys that came from TTM data, so the report can say
+        which basis it is quoting instead of implying everything is current.
+        """
+        sources = (
+            (ttm.get("ratios") or {}, TTM_RATIO_OVERLAY),
+            (ttm.get("key_metrics") or {}, TTM_KEY_METRIC_OVERLAY),
+        )
+
+        applied: list[str] = []
+        for payload, overlay in sources:
+            if not isinstance(payload, dict):
+                continue
+            for (group_name, metric_key), source_key in overlay.items():
+                value = payload.get(source_key)
+                if value is None or group_name not in groups:
+                    continue
+                try:
+                    groups[group_name][metric_key] = float(value)
+                    applied.append(metric_key)
+                except (TypeError, ValueError):
+                    continue
+        return applied
 
     # ── main entry point ──────────────────────────────────────
 
@@ -248,6 +372,8 @@ class FinancialMetricsAgent:
         financials = raw_data.get("financials", {})
         prices = raw_data.get("prices", [])
         profile = raw_data.get("profile")
+        dividend_history = raw_data.get("dividend_history") or []
+        ttm = raw_data.get("ttm") or {}
 
         income = financials.get("income_statement", [])
         balance = financials.get("balance_sheet", [])
@@ -263,7 +389,18 @@ class FinancialMetricsAgent:
         metrics["efficiency"] = self._efficiency_metrics(income, balance)
         metrics["growth"] = self._growth_metrics(income)
         metrics["cash_flow"] = self._cashflow_metrics(cash_flow, income, profile)
-        metrics["dividends"] = self._dividend_metrics(cash_flow, income, profile)
+        metrics["dividends"] = self._dividend_metrics(
+            cash_flow, income, profile, dividend_history,
+        )
+
+        ttm_applied = self._apply_ttm_overlay(metrics, ttm)
+
+        # Round the ratio groups only after the overlay, so TTM values get the
+        # same treatment as computed ones.
+        for group_name in ("valuation", "leverage", "efficiency", "liquidity"):
+            for key, value in metrics[group_name].items():
+                if isinstance(value, (int, float)):
+                    metrics[group_name][key] = round(value, 2)
 
         # Flatten for backward‑compat (the report agent can use either)
         flat: dict[str, Optional[float]] = {}
@@ -272,6 +409,14 @@ class FinancialMetricsAgent:
                 flat.update(group)
 
         computed = sum(1 for v in flat.values() if v is not None)
-        logger.info("Computed %d/%d financial metrics", computed, len(flat))
+        logger.info(
+            "Computed %d/%d financial metrics (%d from TTM data)",
+            computed, len(flat), len(ttm_applied),
+        )
 
-        return {"groups": metrics, **flat}
+        return {
+            "groups": metrics,
+            "ttm_metrics": sorted(set(ttm_applied)),
+            "basis": "trailing twelve months where available, otherwise latest fiscal year",
+            **flat,
+        }

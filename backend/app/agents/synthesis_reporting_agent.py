@@ -224,6 +224,11 @@ class SynthesisReportingAgent:
 
         lines.append("")
         lines.append("### Relative Valuation (Multiples)")
+        # Be explicit about the reporting period behind these numbers.
+        if metrics.get("ttm_metrics"):
+            lines.append("*Trailing twelve months where the provider supplies it.*")
+        elif metrics.get("basis"):
+            lines.append("*Based on the latest annual filing.*")
 
         val_group = metrics.get("groups", {}).get("valuation", {})
         for label, key in [
@@ -286,6 +291,16 @@ class SynthesisReportingAgent:
         lines.append(f"- **Revenue Growth:** {self._fp(growth.get('revenue_growth'))}")
         lines.append(f"- **Net Income Growth:** {self._fp(growth.get('net_income_growth'))}")
         lines.append(f"- **EPS Growth:** {self._fp(growth.get('eps_growth'))}")
+
+        # Three-year rates say more about the business than a single year that
+        # one weak quarter or one-off charge can dominate.
+        if any(growth.get(k) is not None for k in
+               ("revenue_cagr_3y", "net_income_cagr_3y", "eps_cagr_3y")):
+            lines.append("")
+            lines.append("### Three‑Year Compound Growth")
+            lines.append(f"- **Revenue CAGR:** {self._fp(growth.get('revenue_cagr_3y'))}")
+            lines.append(f"- **Net Income CAGR:** {self._fp(growth.get('net_income_cagr_3y'))}")
+            lines.append(f"- **EPS CAGR:** {self._fp(growth.get('eps_cagr_3y'))}")
 
         lines.append("")
         lines.append("### Cash Flow Quality")

@@ -237,6 +237,22 @@ class DataGatheringAgent:
             "geographic": self._fmp_get("revenue-geographic-segmentation", params) or [],
         }
 
+    def get_ttm_metrics(self, ticker: str) -> dict[str, Any]:
+        """
+        Fetch trailing-twelve-month ratios and key metrics.
+
+        Annual statements can be fifteen months stale by the time they are the
+        latest filing, which makes a P/E computed from them describe a company
+        that no longer exists.
+        """
+        params = {"symbol": ticker}
+        ratios = self._fmp_get("ratios-ttm", params, ttl=PROFILE_TTL)
+        key_metrics = self._fmp_get("key-metrics-ttm", params, ttl=PROFILE_TTL)
+        return {
+            "ratios": ratios[0] if isinstance(ratios, list) and ratios else {},
+            "key_metrics": key_metrics[0] if isinstance(key_metrics, list) and key_metrics else {},
+        }
+
     def get_dividend_history(self, ticker: str) -> list[dict]:
         """Fetch historical dividend payouts."""
         data = self._fmp_get("historical-price-eod/dividend", {"symbol": ticker})
@@ -273,6 +289,7 @@ class DataGatheringAgent:
                 "revenue-geographic-segmentation", segment_params
             ),
             "dividend_history": lambda: self.get_dividend_history(ticker),
+            "ttm": lambda: self.get_ttm_metrics(ticker),
         }
 
         results: dict[str, Any] = {}
@@ -317,4 +334,5 @@ class DataGatheringAgent:
                 "geographic": results.get("revenue_geographic") or [],
             },
             "dividend_history": dividends,
+            "ttm": results.get("ttm") or {},
         }
