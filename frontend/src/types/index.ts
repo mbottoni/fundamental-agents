@@ -196,6 +196,22 @@ export interface ChartData {
     relative_valuation_score: number | null;
     summary: string | null;
   };
+  earnings?: {
+    available: boolean;
+    next_date?: string | null;
+    days_until?: number | null;
+    is_imminent?: boolean;
+    eps_estimate?: number | null;
+    beat_rate?: number | null;
+    reports_assessed?: number;
+    recent_surprises?: {
+      date: string;
+      eps_actual: number | null;
+      eps_estimated: number | null;
+      surprise_pct: number | null;
+    }[];
+    note?: string;
+  };
   recommendation?: {
     call: string | null;
     composite_score: number | null;

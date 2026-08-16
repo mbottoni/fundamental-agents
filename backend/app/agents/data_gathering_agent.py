@@ -170,6 +170,17 @@ class DataGatheringAgent:
             "key_metrics": key_metrics[0] if isinstance(key_metrics, list) and key_metrics else {},
         }
 
+    # The current plan caps this endpoint's `limit` at 5 and rejects anything
+    # larger with a plain-text error rather than a smaller result set.
+    EARNINGS_LIMIT = 5
+
+    def get_earnings(self, ticker: str) -> list[dict]:
+        """Fetch the earnings calendar: upcoming dates and recent surprises."""
+        data = self._fmp_get(
+            "earnings", {"symbol": ticker, "limit": str(self.EARNINGS_LIMIT)}, ttl=PROFILE_TTL
+        )
+        return data if isinstance(data, list) else []
+
     def get_peers(self, ticker: str) -> list[dict]:
         """
         Fetch comparable companies.
@@ -300,6 +311,7 @@ class DataGatheringAgent:
             ),
             "dividend_history": lambda: self.get_dividend_history(ticker),
             "ttm": lambda: self.get_ttm_metrics(ticker),
+            "earnings": lambda: self.get_earnings(ticker),
             "peers": lambda: self.get_peers(ticker),
             "sector_valuation": lambda: self.get_sector_valuation(
                 (profile or {}).get("sector"),
@@ -357,6 +369,7 @@ class DataGatheringAgent:
             },
             "dividend_history": dividends,
             "ttm": results.get("ttm") or {},
+            "earnings": results.get("earnings") or [],
             "peers": {"companies": peers, "ratios": peer_ratios},
             "sector_valuation": results.get("sector_valuation") or {},
         }

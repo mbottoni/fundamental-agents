@@ -311,7 +311,12 @@ class RecommendationEngine:
     # ── aggregation ───────────────────────────────────────────
 
     def _confidence(
-        self, factors: list[Factor], composite: float, coverage: float, risk_rating: str
+        self,
+        factors: list[Factor],
+        composite: float,
+        coverage: float,
+        risk_rating: str,
+        earnings: Optional[dict] = None,
     ) -> int:
         """
         Confidence reflects how much of the picture was actually measurable and
@@ -339,6 +344,11 @@ class RecommendationEngine:
             confidence -= 8
         elif risk_rating == "unknown":
             confidence -= 5
+
+        # Results due shortly can replace the numbers this rests on, so a call
+        # made just before them deserves less confidence, not more.
+        if (earnings or {}).get("is_imminent"):
+            confidence -= 10
 
         return int(max(10, min(confidence, 95)))
 
@@ -423,6 +433,7 @@ class RecommendationEngine:
         sentiment: dict,
         current_price: Optional[Number],
         peers: Optional[dict] = None,
+        earnings: Optional[dict] = None,
     ) -> dict[str, Any]:
         """
         Score every factor and combine them into a recommendation.
@@ -436,6 +447,7 @@ class RecommendationEngine:
         risk = risk or {}
         sentiment = sentiment or {}
         peers = peers or {}
+        earnings = earnings or {}
 
         factors = [
             Factor("valuation", "Valuation", self.WEIGHTS["valuation"]),
@@ -477,9 +489,11 @@ class RecommendationEngine:
             recommendation, by_key["valuation"],
         )
         confidence = self._confidence(
-            factors, composite, coverage, risk.get("risk_rating", "unknown"),
+            factors, composite, coverage, risk.get("risk_rating", "unknown"), earnings,
         )
         rationale = self._rationale(available, composite)
+        if earnings.get("is_imminent") and earnings.get("days_until") is not None:
+            rationale += f"; earnings due in {earnings['days_until']} days"
         if limit_note:
             rationale = f"{rationale}; {limit_note}"
 

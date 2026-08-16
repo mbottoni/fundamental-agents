@@ -62,7 +62,9 @@ class _PlanRestricted:
 
 
 PLAN_RESTRICTED = _PlanRestricted()
-RESTRICTED_MARKER = "Restricted Endpoint"
+# The provider signals out-of-plan access in more than one way, and always
+# with HTTP 200 and a plain-text body.
+RESTRICTED_MARKERS = ("Restricted Endpoint", "Premium Query Parameter", "Exclusive Endpoint")
 
 
 class CacheBackend(Protocol):
@@ -184,8 +186,11 @@ class MarketDataClient:
             try:
                 response = httpx.get(url, params=params, timeout=DEFAULT_TIMEOUT)
                 response.raise_for_status()
-                if RESTRICTED_MARKER in response.text[:200]:
-                    logger.error("%s: not included in the current provider plan", label)
+                head = response.text[:200]
+                if any(marker in head for marker in RESTRICTED_MARKERS):
+                    logger.error(
+                        "%s: not included in the current provider plan (%s)", label, head[:120]
+                    )
                     return PLAN_RESTRICTED
                 try:
                     return response.json()

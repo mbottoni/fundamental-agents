@@ -70,7 +70,7 @@ Mark items `[x]` as they land. Each item should ship with tests and a commit.
 - [ ] **4.4 Watchlist alerts.** The model and endpoints exist but do nothing.
   Scheduled re-analysis plus a threshold alert is the retention hook.
 - [ ] **4.5 PDF export.** The report is the product; make it shareable.
-- [ ] **4.6 Earnings-date awareness.** Flag "reports in N days" on a report.
+- [x] **4.6 Earnings-date awareness.** Flag "reports in N days" on a report.
 - [ ] **4.7 Screen by composite score.** Rank a sector by our own factor model.
 - [ ] **4.8 LLM narrative.** There is no LLM anywhere in this project despite
   the name; every agent now emits clean structured data, so a written summary

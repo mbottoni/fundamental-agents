@@ -254,6 +254,44 @@ class SynthesisReportingAgent:
         direction = "above" if relative > 0 else "below"
         return f" — the company trades {abs(relative):.0%} {direction}"
 
+    def _section_earnings(self, earnings: dict) -> str:
+        """Upcoming results and the recent surprise record."""
+        if not earnings or not earnings.get("available"):
+            return ""
+
+        lines = ["## Earnings", ""]
+
+        if earnings.get("next_date"):
+            days = earnings.get("days_until")
+            timing = f" — in {days} day{'s' if days != 1 else ''}" if days is not None else ""
+            lines.append(f"- **Next Report:** {earnings['next_date']}{timing}")
+            if earnings.get("is_imminent"):
+                lines.append(
+                    "> **Results are due shortly.** The figures this analysis rests on are "
+                    "about to be replaced, which is reflected in the confidence score."
+                )
+        if earnings.get("eps_estimate") is not None:
+            lines.append(f"- **Consensus EPS:** {self._fr(earnings['eps_estimate'])}")
+        if earnings.get("beat_rate") is not None:
+            lines.append(
+                f"- **Beat Rate:** {self._fp(earnings['beat_rate'])} of the last "
+                f"{earnings.get('reports_assessed', 0)} reports"
+            )
+
+        surprises = [s for s in earnings.get("recent_surprises", []) if s.get("surprise_pct") is not None]
+        if surprises:
+            lines.append("")
+            lines.append("| Report Date | Actual EPS | Estimated | Surprise |")
+            lines.append("|---|---|---|---|")
+            for surprise in surprises[:4]:
+                lines.append(
+                    f"| {surprise['date']} | {self._fr(surprise['eps_actual'])} | "
+                    f"{self._fr(surprise['eps_estimated'])} | "
+                    f"{self._fp(surprise['surprise_pct'])} |"
+                )
+
+        return "\n".join(lines)
+
     def _section_peers(self, peers: dict) -> str:
         """Company multiples next to the peer group and the wider sector."""
         lines = ["## Peer & Sector Comparison", ""]
@@ -586,6 +624,7 @@ class SynthesisReportingAgent:
         risk: dict,
         assessment: Optional[dict] = None,
         peers: Optional[dict] = None,
+        earnings: Optional[dict] = None,
     ) -> str:
         """Generate the final comprehensive markdown report."""
         logger.info("Generating synthesis report")
@@ -611,6 +650,7 @@ class SynthesisReportingAgent:
                 sentiment=sentiment,
                 current_price=current_price,
                 peers=peers,
+                earnings=earnings,
             )
 
         sections = [
@@ -626,6 +666,7 @@ class SynthesisReportingAgent:
             self._section_technical(technical),
             self._section_risk(risk),
             self._section_sentiment(sentiment),
+            self._section_earnings(earnings or {}),
             self._section_thesis(assessment, valuation, current_price, dcf_value),
             (
                 "\n---\n\n"

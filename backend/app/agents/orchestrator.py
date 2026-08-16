@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from .. import crud, models
 from .data_gathering_agent import DataGatheringAgent
+from .earnings_agent import EarningsAgent
 from .financial_metrics_agent import FinancialMetricsAgent
 from .news_sentiment_agent import NewsSentimentAgent
 from .peer_comparison_agent import PeerComparisonAgent
@@ -56,6 +57,7 @@ class Orchestrator:
         self.sentiment_agent = NewsSentimentAgent()
         self.valuation_agent = ValuationAgent()
         self.peer_agent = PeerComparisonAgent()
+        self.earnings_agent = EarningsAgent()
         self.recommendation_engine = RecommendationEngine()
         self.synthesis_agent = SynthesisReportingAgent()
 
@@ -69,6 +71,7 @@ class Orchestrator:
         valuation: dict,
         assessment: dict,
         peers: dict,
+        earnings: dict,
     ) -> dict[str, Any]:
         """
         Build a structured dict for the frontend charting components.
@@ -184,6 +187,7 @@ class Orchestrator:
                 "relative_valuation_score": peers.get("relative_valuation_score"),
                 "summary": peers.get("summary"),
             },
+            "earnings": earnings,
             "recommendation": {
                 "call": assessment.get("recommendation"),
                 "composite_score": assessment.get("composite_score"),
@@ -277,6 +281,7 @@ class Orchestrator:
             )
             valuation = self.valuation_agent.run(raw_data)
             peers = self.peer_agent.run(raw_data, metrics)
+            earnings = self.earnings_agent.run(raw_data)
 
             # ── Step 3: Score the investment case ────────────
             prices = raw_data.get("prices") or []
@@ -288,6 +293,7 @@ class Orchestrator:
                 sentiment=sentiment,
                 current_price=prices[0].get("close") if prices else None,
                 peers=peers,
+                earnings=earnings,
             )
 
             # ── Step 4: Synthesize the report ────────────────
@@ -302,11 +308,13 @@ class Orchestrator:
                 risk=risk,
                 assessment=assessment,
                 peers=peers,
+                earnings=earnings,
             )
 
             # ── Step 5: Build structured chart data ──────────
             chart_data = self._build_chart_data(
                 raw_data, metrics, technical, risk, sentiment, valuation, assessment, peers,
+                earnings,
             )
 
             # ── Step 5: Save & finalize ──────────────────────
