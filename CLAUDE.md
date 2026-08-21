@@ -49,7 +49,7 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 
 ### The analysis pipeline
 
-`POST /api/v1/analysis/` creates an `AnalysisJob` and schedules `run_analysis_background` as a FastAPI `BackgroundTask` (no Celery/queue). That task opens its **own** session via `get_standalone_session()` — request-scoped `get_db()` sessions are already closed by then — and runs `Orchestrator.run_analysis`.
+`POST /api/v1/analysis/` reuses a recent completed analysis where it can, and otherwise creates an `AnalysisJob` and schedules `run_analysis_background` as a FastAPI `BackgroundTask` (no Celery/queue). That task opens its **own** session via `get_standalone_session()` — request-scoped `get_db()` sessions are already closed by then — and runs `Orchestrator.run_analysis`.
 
 `backend/app/agents/orchestrator.py` is the spine. Each agent is a stateless class with a single `run()` that takes and returns plain dicts; they never touch the DB:
 
@@ -68,6 +68,8 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 **Where to be careful:** the DCF must keep its equity bridge and its guard rails (negative FCF, the WACC-vs-terminal-growth spread, negative equity value) — each exists because removing it produces confident nonsense. The recommendation is capped by the valuation factor so quality and growth cannot outvote price entirely.
 
 The orchestrator writes job status at each stage (`pending → gathering_data → analyzing → generating_report → complete | failed`); the frontend dashboard polls `GET /api/v1/analysis/{id}` every 4s. Exceptions are caught and turned into a user-facing `error_message` on the job via `Orchestrator._failure_message`; raise `DataUnavailableError` with an explanatory message for anything the user could act on. Jobs left mid-flight by a restart are failed at startup by `_reap_interrupted_jobs`.
+
+Reuse happens at two levels inside `start_analysis`, both bounded by `ANALYSIS_REUSE_HOURS` and both skipped when `force=true`: the user's own recent analysis is returned as-is, and failing that any user's recent analysis of the ticker is **copied** into a new job for the requester (`_reuse_existing_analysis`). Nothing in a report depends on who asked for it, so rebuilding one would spend eleven provider requests to produce an identical document. Rows are copied, never shared — `Report.job_id` is unique and every ownership check keys off the job's owner. A reused analysis still counts against the free-tier daily cap; exempting it would spend no quota but would turn the free tier into unlimited analyses for any popular ticker.
 
 Each completed analysis also writes an `AnalysisSnapshot` — the recommendation, score and price at that moment. It backs `/api/v1/history/*` (per-ticker history, past-call performance, leaderboard) and the watchlist alerts, and cannot be reconstructed after the fact.
 
