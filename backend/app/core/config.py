@@ -51,6 +51,24 @@ class Settings(BaseSettings):
     EMAILS_FROM_NAME: str = "StockAnalyzer AI"
     EMAILS_FROM_ADDRESS: str = "noreply@stockanalyzer.ai"
 
+    # --- Analysis queue ---
+    # How many analyses one worker runs at once. Each fans out ~11 provider
+    # requests, so this is the main defence against walking into the provider's
+    # rate limit; raise it only alongside the quota.
+    ANALYSIS_WORKER_CONCURRENCY: int = 2
+    # How long a claimed job may go without a heartbeat before another worker
+    # treats it as abandoned and takes it over.
+    ANALYSIS_LEASE_SECONDS: int = 300
+    # How often an idle worker looks for new work.
+    ANALYSIS_POLL_SECONDS: int = 5
+    # Total attempts per job, including the first. Most pipeline failures are
+    # provider timeouts, which usually succeed on a retry.
+    ANALYSIS_MAX_ATTEMPTS: int = 3
+    # Run the worker inside the API process. Convenient for local development,
+    # where it keeps `make up` to one container; production runs the worker as
+    # its own service so an API deploy does not interrupt it.
+    ANALYSIS_WORKER_INLINE: bool = True
+
     # --- Caching (optional) ---
     # Set to share the market-data cache across gunicorn workers; without it
     # each worker keeps its own in-process cache.
