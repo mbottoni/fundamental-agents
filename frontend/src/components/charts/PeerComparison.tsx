@@ -52,7 +52,7 @@ export default function PeerComparison({ peers }: { peers: Peers }) {
             key={company.symbol}
             href={`/chart/${company.symbol}`}
             className="text-xs font-mono bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-blue-300 transition"
-            title={company.name || company.symbol}
+            title={company.name || company.symbol || undefined}
           >
             {company.symbol}
           </Link>
@@ -72,7 +72,7 @@ export default function PeerComparison({ peers }: { peers: Peers }) {
             </thead>
             <tbody>
               {rows.map((row) => {
-                const format = isMargin(row.key) ? fmtPct : fmtRatio;
+                const format = isMargin(row.key ?? '') ? fmtPct : fmtRatio;
                 return (
                   <tr key={row.key} className="border-b border-white/5 last:border-0">
                     <td className="py-2.5 text-gray-300">{row.label}</td>

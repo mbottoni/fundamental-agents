@@ -1,6 +1,6 @@
 .PHONY: help up down build restart logs logs-backend logs-frontend logs-db \
        shell-backend shell-frontend shell-db \
-       health test test-backend test-ci \
+       health test test-backend test-ci gen-types \
        clean clean-volumes reset \
        migrate migrate-create \
        prod-up prod-down \
@@ -95,6 +95,10 @@ test-backend: ## Run backend pytest suite
 
 test-local: ## Run backend tests locally (no Docker)
 	cd backend && pytest -v --tb=short
+
+gen-types: ## Regenerate frontend types from the backend's OpenAPI schema
+	cd backend && python scripts/dump_openapi.py openapi.json
+	cd frontend && npm run gen:types
 
 # ══════════════════════════════════════════════════════════════
 # Database Migrations (Alembic)

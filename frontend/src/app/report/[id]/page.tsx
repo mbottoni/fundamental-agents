@@ -98,7 +98,7 @@ function PriceChart({ data, ma }: { data: PricePoint[]; ma: ChartData['moving_av
   if (!data.length) return <p className="text-gray-500">No price data available.</p>;
 
   const chartData = data.map(p => ({
-    date: shortDate(p.date),
+    date: p.date ? shortDate(p.date) : '',
     close: p.close,
     volume: p.volume || 0,
   }));
@@ -229,7 +229,7 @@ function SentimentDonut({ data, score }: { data: ChartData['sentiment']; score: 
             stroke="none"
           >
             {data.map((entry, i) => (
-              <Cell key={i} fill={entry.color} />
+              <Cell key={i} fill={entry.color ?? undefined} />
             ))}
           </Pie>
           <Tooltip content={<ChartTooltip />} />
@@ -244,7 +244,7 @@ function SentimentDonut({ data, score }: { data: ChartData['sentiment']; score: 
         <div className="space-y-1">
           {data.map((d, i) => (
             <div key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color ?? undefined }} />
               <span className="text-gray-300">{d.name}</span>
               <span className="text-gray-500">{d.value}</span>
             </div>

@@ -65,9 +65,61 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
 
+  # ── Generated Types Drift Check ────────────────────────────
+  # The report chart payload and every API shape are declared once, in the
+  # backend. `frontend/src/types/api.ts` is generated from the OpenAPI document
+  # and committed; if a schema changes without regenerating, this fails rather
+  # than letting the frontend silently read fields that no longer exist.
+  types-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Regenerate types from the OpenAPI schema
+        run: |
+          python scripts/dump_openapi.py openapi.json
+          cd ../frontend && npm run gen:types
+        working-directory: ./backend
+
+      - name: Fail if the committed types are stale
+        run: |
+          if ! git diff --exit-code -- frontend/src/types/api.ts; then
+            echo ""
+            echo "::error::frontend/src/types/api.ts is out of date."
+            echo "The backend schema changed without regenerating the frontend types."
+            echo "Run 'make gen-types' and commit the result."
+            exit 1
+          fi
+
+      - name: Type-check the frontend against them
+        run: npx tsc --noEmit
+        working-directory: ./frontend
+
   # ── Docker Build + Push (only on main) ─────────────────────
   build-and-push:
-    needs: [backend-test, frontend-build]
+    needs: [backend-test, frontend-build, types-check]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
