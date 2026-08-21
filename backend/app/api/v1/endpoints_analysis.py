@@ -1,57 +1,21 @@
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
-from app.agents.orchestrator import Orchestrator
 from app.api.deps import get_current_user
 from app.core.config import settings
-from app.core.db import get_db, get_standalone_session
+from app.core.db import get_db
 
 logger = logging.getLogger("stock_analyzer.api.analysis")
 
 router = APIRouter()
 
 
-def run_analysis_background(job_id: int, ticker: str) -> None:
-    """
-    Background task that runs the full analysis pipeline.
-
-    Uses a standalone DB session since background tasks run outside the
-    request lifecycle.
-    """
-    db = get_standalone_session()
-    try:
-        job = crud.get_analysis_job(db, job_id)
-        if not job:
-            logger.error("Background task: job %d not found", job_id)
-            return
-
-        orchestrator = Orchestrator(ticker)
-        orchestrator.run_analysis(db=db, job=job)
-    except Exception as e:
-        logger.error("Background task failed for job %d: %s", job_id, e, exc_info=True)
-        try:
-            crud.update_job_status(
-                db,
-                job_id=job_id,
-                status="failed",
-                error_message=(
-                    f"The analysis of {ticker} could not be started. Please try again "
-                    "in a moment."
-                ),
-            )
-        except Exception:
-            logger.error("Failed to update job %d status to 'failed'", job_id)
-    finally:
-        db.close()
-
-
 @router.post("/", response_model=schemas.AnalysisJob, status_code=status.HTTP_202_ACCEPTED)
 def start_analysis(
     request: schemas.AnalysisJobCreate,
-    background_tasks: BackgroundTasks,
     force: bool = Query(
         False, description="Re-run even if a recent analysis of this ticker exists"
     ),
@@ -92,8 +56,10 @@ def start_analysis(
                 ),
             )
 
+    # Creating the row *is* the enqueue: the job table is the queue, and a
+    # worker will claim this row. It no longer runs in the web process, so a
+    # deploy cannot destroy it mid-flight.
     job = crud.create_analysis_job(db=db, job=request, user_id=current_user.id)
-    background_tasks.add_task(run_analysis_background, job.id, request.ticker)
     logger.info("Analysis job %d queued for %s by user %d", job.id, request.ticker, current_user.id)
     return job
 
