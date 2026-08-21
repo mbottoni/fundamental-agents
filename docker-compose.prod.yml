@@ -30,6 +30,35 @@ services:
       - .env.prod
     environment:
       - DATABASE_URL=postgresql://user:${DB_PASSWORD}@db:5432/stock-analyzer
+      # Analyses run in the worker service below, so restarting the API for a
+      # deploy does not interrupt one.
+      - ANALYSIS_WORKER_INLINE=false
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  # Runs the analysis pipeline off the job queue. Scale it with
+  # `docker compose up -d --scale worker=N`: workers claim rows with
+  # FOR UPDATE SKIP LOCKED, so several can poll the same table safely. Mind the
+  # provider quota — every concurrent analysis is ~11 more requests against it.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -m app.worker
+    env_file:
+      - .env.prod
+    environment:
+      - DATABASE_URL=postgresql://user:${DB_PASSWORD}@db:5432/stock-analyzer
+      # The alert sweep belongs to the API process; a worker running it too
+      # would duplicate the work.
+      - ALERT_SWEEP_MINUTES=0
     depends_on:
       db:
         condition: service_healthy

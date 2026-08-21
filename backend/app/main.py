@@ -108,29 +108,43 @@ def _run_auto_migrations() -> None:
             conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN error_message TEXT"))
             logger.info("Migration: added error_message column to analysisjobs.")
 
+        # analysisjobs queue bookkeeping
+        if "attempts" not in job_cols:
+            conn.execute(
+                text("ALTER TABLE analysisjobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+            )
+            logger.info("Migration: added attempts column to analysisjobs.")
+        if "locked_at" not in job_cols:
+            conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN locked_at TIMESTAMPTZ"))
+            logger.info("Migration: added locked_at column to analysisjobs.")
+        if "locked_by" not in job_cols:
+            conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN locked_by VARCHAR"))
+            logger.info("Migration: added locked_by column to analysisjobs.")
+
         conn.commit()
 
 
-def _reap_interrupted_jobs() -> None:
+def _recover_interrupted_jobs() -> None:
     """
-    Fail jobs left running by a previous process.
+    Put jobs stranded by a previous process back on the queue.
 
-    Analyses run as in-process background tasks, so anything mid-flight when
-    the server stopped is gone — without this the frontend polls those jobs
-    forever.
+    This used to fail everything in flight, because an analysis running as an
+    in-process background task really was gone once that process died. Now that
+    jobs are claimed under a lease, a stranded one can simply be run again —
+    which is strictly better for the user, who was charged a daily analysis when
+    the job was created and would otherwise be told to spend another.
+
+    Leases are checked rather than assumed expired: another worker may be
+    perfectly healthy and midway through the job this process can see.
     """
     from .core.db import SessionLocal
-    from .crud import fail_stale_jobs
+    from .services.job_queue import reclaim_expired_jobs
 
     db = SessionLocal()
     try:
-        fail_stale_jobs(
-            db,
-            "This analysis was interrupted by a server restart and did not finish. "
-            "Please run it again.",
-        )
+        reclaim_expired_jobs(db)
     except Exception as e:
-        logger.warning("Could not reap interrupted jobs (non-fatal): %s", e)
+        logger.warning("Could not recover interrupted jobs (non-fatal): %s", e)
     finally:
         db.close()
 
@@ -181,16 +195,43 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified.")
     _run_auto_migrations()
-    _reap_interrupted_jobs()
+    _recover_interrupted_jobs()
 
     import asyncio
 
     sweep_task = asyncio.create_task(_watchlist_sweep())
 
+    # The worker runs in-process for local development so `make up` still needs
+    # one container. Production sets ANALYSIS_WORKER_INLINE=false and runs
+    # `python -m app.worker` as its own service, so deploying the API does not
+    # interrupt an analysis.
+    worker = None
+    worker_thread = None
+    if settings.ANALYSIS_WORKER_INLINE:
+        import threading
+
+        from .worker import Worker
+
+        worker = Worker()
+        worker_thread = threading.Thread(
+            target=worker.run_forever, name="inline-analysis-worker", daemon=True
+        )
+        worker_thread.start()
+        logger.info("Inline analysis worker started.")
+    else:
+        logger.info("Inline worker disabled; expecting a standalone worker process.")
+
     yield
 
     logger.info("Shutting down Stock Analyzer AI...")
     sweep_task.cancel()
+    if worker is not None:
+        worker.stop()
+        # Give an in-flight analysis a moment to release its lease. Anything
+        # still running is reclaimed once its lease expires, so this is a
+        # courtesy rather than a correctness requirement.
+        if worker_thread is not None:
+            worker_thread.join(timeout=5)
     engine.dispose()
     logger.info("Database connections closed.")
 
