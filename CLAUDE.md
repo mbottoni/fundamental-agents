@@ -97,6 +97,7 @@ All FMP traffic goes through `app/core/market_data.py` — retries with backoff 
 - `get_current_user` has a deliberate side effect: emails listed in `settings.PREMIUM_EMAILS` are force-upgraded to `subscription_status = "active"` on every request.
 - Free tier is capped at `FREE_TIER_DAILY_ANALYSES` (default 3) — enforced in `endpoints_analysis.start_analysis` via `crud.count_user_analyses_today`, returning 429. The frontend duplicates the number as `FREE_ANALYSIS_LIMIT` in `dashboard/page.tsx`.
 - Stripe subscription status is updated through the webhook in `endpoints_stripe.py`.
+- Rate limiting lives in `app/core/rate_limit.py`, not in slowapi: slowapi's middleware resolves routes by walking `app.routes` for an `.endpoint`, and this Starlette version nests included routers under `_IncludedRouter`, so it silently exempted every API route. `RateLimitMiddleware` counts per caller — per **user** when a valid access token is present, per client address otherwise. Anything added to `EXEMPT_PATHS` bypasses it entirely (health checks and the Stripe webhook). The address fallback is only meaningful when the app runs with `--forwarded-allow-ips`, which `docker-compose.prod.yml` sets; without it every request behind Caddy shares one bucket.
 
 ### Schema management
 

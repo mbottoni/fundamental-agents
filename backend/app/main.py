@@ -10,9 +10,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api.v1 import (
@@ -31,6 +28,7 @@ from .api.v1 import (
 )
 from .core.config import logger, settings
 from .core.db import engine
+from .core.rate_limit import RateLimitMiddleware
 from .db.base import Base
 
 
@@ -51,11 +49,6 @@ if settings.SENTRY_DSN:
         logger.info("Sentry initialized.")
     except Exception as e:
         logger.warning("Sentry init failed (non-fatal): %s", e)
-
-
-# ── Rate Limiter ──────────────────────────────────────────────
-
-limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
 
 
 # ── Security Headers Middleware ───────────────────────────────
@@ -204,9 +197,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Attach rate limiter
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Rate limiting. See app/core/rate_limit.py — the previous slowapi wiring
+# never counted a single request.
+app.add_middleware(RateLimitMiddleware)
 
 # Security headers
 app.add_middleware(SecurityHeadersMiddleware)

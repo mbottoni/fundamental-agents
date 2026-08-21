@@ -13,6 +13,10 @@ os.environ.setdefault("FINANCIAL_MODELING_PREP_API_KEY", "test_key")
 os.environ.setdefault("NEWS_API_KEY", "test_key")
 os.environ.setdefault("STRIPE_SECRET_KEY", "sk_test_fake")
 os.environ.setdefault("STRIPE_WEBHOOK_SECRET", "whsec_fake")
+# The suite makes far more than RATE_LIMIT_PER_MINUTE calls in a minute, and
+# the limiter's storage is shared for the whole session. Tests that care about
+# limiting turn it back on explicitly (see test_rate_limit.py).
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient
