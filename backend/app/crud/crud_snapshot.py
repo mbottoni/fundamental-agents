@@ -41,6 +41,45 @@ def create_snapshot(
     return snapshot
 
 
+def copy_snapshot(
+    db: Session, source: AnalysisSnapshot, *, user_id: int, job_id: int
+) -> AnalysisSnapshot:
+    """
+    Record the same conclusion for another user's job.
+
+    A reused analysis still needs its own snapshot row: the history view, the
+    past-call performance figures and the leaderboard are all per-user, and a
+    user who never gets a row simply does not appear in them.
+
+    The values are copied from the original rather than recomputed so both
+    users' histories agree about what was concluded and at what price.
+    """
+    snapshot = AnalysisSnapshot(
+        user_id=user_id,
+        job_id=job_id,
+        ticker=source.ticker,
+        recommendation=source.recommendation,
+        composite_score=source.composite_score,
+        confidence=source.confidence,
+        price=source.price,
+        dcf_value=source.dcf_value,
+        risk_rating=source.risk_rating,
+    )
+    db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    logger.info(
+        "Copied snapshot for %s (%s) to job %d",
+        snapshot.ticker, snapshot.recommendation, job_id,
+    )
+    return snapshot
+
+
+def get_snapshot_by_job_id(db: Session, job_id: int) -> Optional[AnalysisSnapshot]:
+    """The snapshot written for a job, if one was recorded."""
+    return db.query(AnalysisSnapshot).filter(AnalysisSnapshot.job_id == job_id).first()
+
+
 def get_ticker_history(
     db: Session, user_id: int, ticker: str, limit: int = 50
 ) -> list[AnalysisSnapshot]:

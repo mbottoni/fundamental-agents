@@ -13,6 +13,43 @@ logger = logging.getLogger("stock_analyzer.api.analysis")
 router = APIRouter()
 
 
+def _reuse_existing_analysis(
+    db: Session, source: models.AnalysisJob, user_id: int, ticker: str
+) -> models.AnalysisJob:
+    """
+    Give the user their own completed job backed by an existing report.
+
+    The report is copied rather than shared: `Report.job_id` is unique and every
+    ownership check keys off the job's owner, so a shared row would either break
+    the constraint or hand one user a job they do not own.
+    """
+    # Born complete, never pending: the job table is the work queue, and a
+    # pending row is an invitation for a worker to claim it and run the whole
+    # pipeline for a report this function is about to supply.
+    job = crud.create_analysis_job(
+        db,
+        job=schemas.AnalysisJobCreate(ticker=ticker),
+        user_id=user_id,
+        status="complete",
+    )
+    crud.copy_report(db, source=source.report, job_id=job.id)
+
+    # The snapshot backs the per-user history, past-call performance and
+    # leaderboard views. A user with no row simply never appears in them.
+    source_snapshot = crud.get_snapshot_by_job_id(db, job_id=source.id)
+    if source_snapshot is not None:
+        try:
+            crud.copy_snapshot(db, source_snapshot, user_id=user_id, job_id=job.id)
+        except Exception as e:  # noqa: BLE001 - never fail a finished report
+            logger.error("Could not copy snapshot for job %d: %s", job.id, e)
+    else:
+        # Jobs predating snapshots, or one whose snapshot insert failed.
+        logger.info("Source job %d has no snapshot to copy", source.id)
+
+    db.refresh(job)
+    return job
+
+
 @router.post("/", response_model=schemas.AnalysisJob, status_code=status.HTTP_202_ACCEPTED)
 def start_analysis(
     request: schemas.AnalysisJobCreate,
@@ -25,10 +62,16 @@ def start_analysis(
     """
     Start a new stock analysis job for the given ticker.
 
-    A recent completed analysis of the same ticker is returned as-is unless
-    `force` is set: the underlying filings are quarterly, so re-running minutes
-    later spends eleven provider requests and one of the user's daily analyses
-    to rebuild the same report. Free-tier users are limited to a daily cap.
+    A recent completed analysis of the same ticker is reused unless `force` is
+    set: the underlying filings are quarterly, so re-running minutes later
+    spends eleven provider requests to rebuild the same report. Free-tier users
+    are limited to a daily cap.
+
+    Reuse happens at two levels. The user's own recent analysis is returned
+    as-is — they already have that report. Failing that, any user's recent
+    analysis of the ticker is copied into a new job for this user: nothing in a
+    report depends on who asked for it, so rebuilding one costs eleven provider
+    requests to produce an identical document.
     """
     if not force:
         recent = crud.get_recent_complete_job(
@@ -44,7 +87,12 @@ def start_analysis(
             )
             return recent
 
-    # Enforce free-tier daily limit
+    # Enforce free-tier daily limit.
+    #
+    # This deliberately also covers the shared-reuse path below. That path
+    # spends no provider quota, but exempting it would quietly turn the free
+    # tier into unlimited analyses for any already-popular ticker — a pricing
+    # change, not a caching one.
     if current_user.subscription_status != "active":
         today_count = crud.count_user_analyses_today(db, current_user.id)
         if today_count >= settings.FREE_TIER_DAILY_ANALYSES:
@@ -55,6 +103,22 @@ def start_analysis(
                     "Upgrade to Premium for unlimited analyses."
                 ),
             )
+
+    if not force:
+        shared = crud.get_reusable_job(
+            db,
+            ticker=request.ticker,
+            within_hours=settings.ANALYSIS_REUSE_HOURS,
+        )
+        if shared is not None:
+            job = _reuse_existing_analysis(
+                db, source=shared, user_id=current_user.id, ticker=request.ticker
+            )
+            logger.info(
+                "Copied analysis job %d to job %d for %s (user %d) — no provider calls",
+                shared.id, job.id, request.ticker, current_user.id,
+            )
+            return job
 
     # Creating the row *is* the enqueue: the job table is the queue, and a
     # worker will claim this row. It no longer runs in the web process, so a

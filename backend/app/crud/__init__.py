@@ -14,10 +14,11 @@ from .crud_analysis_job import (
     fail_stale_jobs,
     get_analysis_job,
     get_recent_complete_job,
+    get_reusable_job,
     update_job_status,
     get_user_jobs,
 )
-from .crud_report import create_report, get_report, get_report_by_job_id
+from .crud_report import copy_report, create_report, get_report, get_report_by_job_id
 from .crud_watchlist import (
     get_user_watchlist,
     get_watchlist_item,
@@ -27,7 +28,9 @@ from .crud_watchlist import (
     remove_from_watchlist,
 )
 from .crud_snapshot import (
+    copy_snapshot,
     create_snapshot,
+    get_snapshot_by_job_id,
     get_latest_snapshot,
     get_ticker_history,
     get_user_snapshots,
