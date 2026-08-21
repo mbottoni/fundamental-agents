@@ -1,12 +1,21 @@
-// --- User ---
-export interface User {
-  id: number;
-  email: string;
-  subscription_status: string;
-  is_verified: boolean;
-}
+// Types shared across the app.
+//
+// Anything the backend defines is DERIVED from `./api.ts`, which is generated
+// from the FastAPI OpenAPI document (`npm run gen:types`). These used to be
+// retyped by hand and drifted silently — `ChartData.macd` declared a
+// `histogram` field the backend has always called `macd_histogram`, and
+// nothing failed, because a mismatched field simply reads as undefined.
+//
+// Only view models with no server counterpart are still written out below.
 
-// --- Auth ---
+import type { components } from './api';
+
+type Schemas = components['schemas'];
+
+// --- User ---
+export type User = Schemas['User'];
+
+// --- Auth (client-side shapes; the token response is not modelled server-side) ---
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
@@ -23,6 +32,9 @@ export interface AuthContextType {
 }
 
 // --- Analysis Jobs ---
+// The backend types `status` as a plain string; the union is a frontend
+// refinement, so it is layered over the generated shape rather than replacing
+// it. Everything else on the job comes from the server.
 export type JobStatus =
   | 'pending'
   | 'gathering_data'
@@ -31,34 +43,15 @@ export type JobStatus =
   | 'complete'
   | 'failed';
 
-export interface AnalysisJob {
-  id: number;
-  user_id: number;
-  ticker: string;
-  // Populated when status is 'failed'; explains why in user-facing language.
-  error_message?: string | null;
+export type AnalysisJob = Omit<Schemas['AnalysisJob'], 'status'> & {
   status: JobStatus;
-  report_id: number | null;
-  created_at: string;
-}
+};
 
 // --- Reports ---
-export interface Report {
-  id: number;
-  content: string;
-  chart_data: ChartData | null;
-  job_id: number;
-  created_at: string;
-}
+export type Report = Schemas['Report'];
 
 // --- Watchlist ---
-export interface WatchlistItem {
-  id: number;
-  user_id: number;
-  ticker: string;
-  notes: string | null;
-  created_at: string;
-}
+export type WatchlistItem = Schemas['WatchlistItem'];
 
 // --- Dashboard ---
 export interface DashboardStats {
@@ -93,165 +86,16 @@ export interface SearchResult {
 }
 
 // --- Chart Data (structured data for visualizations) ---
-
-export interface PricePoint {
-  date: string;
-  close: number;
-  volume: number;
-  sma_20?: number | null;
-  sma_50?: number | null;
-  sma_200?: number | null;
-  bb_upper?: number | null;
-  bb_lower?: number | null;
-}
-
-export interface BarDataPoint {
-  name: string;
-  value: number;
-}
-
-export interface SentimentSlice {
-  name: string;
-  value: number;
-  color?: string;
-}
-
-export interface ChartData {
-  ticker: string;
-  company_name: string;
-  current_price: number | null;
-  price_series: PricePoint[];
-  moving_averages: {
-    sma_20: number | null;
-    sma_50: number | null;
-    sma_200: number | null;
-  };
-  bollinger_bands: {
-    upper: number | null;
-    lower: number | null;
-    middle: number | null;
-  };
-  rsi: number | null;
-  macd: {
-    macd_line: number | null;
-    signal_line: number | null;
-    histogram: number | null;
-  };
-  atr: number | null;
-  volume_profile: {
-    avg_volume: number | null;
-    relative_volume: number | null;
-  };
-  momentum: {
-    price_momentum_1m: number | null;
-    price_momentum_3m: number | null;
-    price_momentum_6m: number | null;
-  };
-  trend_signals: string[];
-  support_resistance: {
-    support: number | null;
-    resistance: number | null;
-  };
-  profitability: BarDataPoint[];
-  valuation_multiples: BarDataPoint[];
-  sentiment: SentimentSlice[];
-  sentiment_score: number;
-  growth: BarDataPoint[];
-  risk: {
-    rating: string;
-    annual_volatility: number | null;
-    sharpe_ratio: number | null;
-    sortino_ratio: number | null;
-    max_drawdown_pct: number | null;
-    beta: number | null;
-    var_95: number | null;
-    annualized_return?: number | null;
-    window_start?: string | null;
-    window_end?: string | null;
-  };
-  dcf: {
-    intrinsic_value: number | null;
-    wacc: number | null;
-    current_price: number | null;
-    // Range across the WACC x terminal-growth sensitivity grid.
-    value_low?: number | null;
-    value_high?: number | null;
-    net_debt?: number | null;
-    status?: string | null;
-    error?: string | null;
-  };
-  peers?: {
-    peer_count: number;
-    companies: { symbol: string; name: string | null; market_cap: number | null }[];
-    comparisons: PeerComparison[];
-    sector: {
-      sector: string | null;
-      industry: string | null;
-      sector_pe: number | null;
-      industry_pe: number | null;
-      vs_sector_pe: number | null;
-      vs_industry_pe: number | null;
-      as_of: string | null;
-    };
-    relative_valuation_score: number | null;
-    summary: string | null;
-  };
-  earnings?: {
-    available: boolean;
-    next_date?: string | null;
-    days_until?: number | null;
-    is_imminent?: boolean;
-    eps_estimate?: number | null;
-    beat_rate?: number | null;
-    reports_assessed?: number;
-    recent_surprises?: {
-      date: string;
-      eps_actual: number | null;
-      eps_estimated: number | null;
-      surprise_pct: number | null;
-    }[];
-    note?: string;
-  };
-  recommendation?: {
-    call: string | null;
-    composite_score: number | null;
-    confidence: number | null;
-    rationale: string | null;
-    coverage: number | null;
-    factors: RecommendationFactor[];
-  };
-  liquidity: Record<string, number | null>;
-  leverage: Record<string, number | null>;
-  revenue_segments?: {
-    product: { name: string; value: number }[];
-    geographic: { name: string; value: number }[];
-  };
-  dividend_history?: { date: string; dividend: number }[];
-}
-
-// One metric measured against the peer group. `premium_discount` is the
-// company's position relative to the peer median, so negative means cheaper
-// for a multiple and weaker for a margin — read it with `lower_is_better`.
-export interface PeerComparison {
-  key: string;
-  label: string;
-  company: number | null;
-  peer_median: number | null;
-  premium_discount: number | null;
-  percentile: number | null;
-  lower_is_better: boolean;
-  verdict: string;
-}
-
-// One scored dimension of the recommendation, as produced by the backend
-// scoring engine. `score` is null when the factor had insufficient data.
-export interface RecommendationFactor {
-  key: string;
-  label: string;
-  weight: number;
-  score: number | null;
-  drivers: string[];
-}
+//
+// All generated. `ChartData` is the contract with `_build_chart_data()` in the
+// orchestrator; the nested aliases exist because components take the pieces as
+// props.
+export type ChartData = Schemas['ChartData'];
+export type PricePoint = Schemas['PricePoint'];
+export type BarDataPoint = Schemas['BarDataPoint'];
+export type SentimentSlice = Schemas['SentimentSlice'];
+export type PeerComparison = Schemas['PeerMetricComparison'];
+export type RecommendationFactor = Schemas['RecommendationFactor'];
 
 // --- API Errors ---
 export interface ApiError {

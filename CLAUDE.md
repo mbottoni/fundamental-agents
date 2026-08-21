@@ -71,7 +71,9 @@ The orchestrator writes job status at each stage (`pending → gathering_data �
 
 Each completed analysis also writes an `AnalysisSnapshot` — the recommendation, score and price at that moment. It backs `/api/v1/history/*` (per-ticker history, past-call performance, leaderboard) and the watchlist alerts, and cannot be reconstructed after the fact.
 
-**Two outputs per job:** the markdown `Report.content`, and `Report.chart_data`, a JSON **string** built by `Orchestrator._build_chart_data()`. That dict is the contract for the report page's Recharts components — its shape must stay in sync with `ChartData` in `frontend/src/types/index.ts`. It is serialized in `crud.create_report` and deserialized by a `field_validator` on `schemas.Report`.
+**Two outputs per job:** the markdown `Report.content`, and `Report.chart_data`, a JSON **string** built by `Orchestrator._build_chart_data()`. That dict is the contract for the report page's Recharts components; it is declared as `schemas.ChartData`, serialized in `crud.create_report` and deserialized by a `field_validator` on `schemas.Report`.
+
+The frontend no longer retypes that shape. `frontend/src/types/api.ts` is **generated** from the OpenAPI document and committed, and `types/index.ts` aliases it — so changing `_build_chart_data` means changing `schemas/chart_data.py` and running `make gen-types`, or CI's `types-check` job fails. `tests/test_chart_data_schema.py` asserts the schema drops nothing the producer emits: a field named wrongly there is silently discarded on serialization, which is worse than no schema at all.
 
 When adding an agent: write the class with `run()`, instantiate it in `Orchestrator.__init__`, call it in `run_analysis`, and thread its output into both `_build_chart_data` and `SynthesisReportingAgent.run`. If it produces something the recommendation should weigh, add a factor in `recommendation.py` rather than special-casing it in the report.
 
