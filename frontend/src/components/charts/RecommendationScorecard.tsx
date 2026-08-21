@@ -57,7 +57,7 @@ function FactorRow({ factor }: { factor: RecommendationFactor }) {
         <div className="flex items-baseline gap-2 min-w-0">
           <span className="font-medium text-white truncate">{factor.label}</span>
           <span className="text-xs text-gray-500 shrink-0">
-            {(factor.weight * 100).toFixed(0)}% weight
+            {((factor.weight ?? 0) * 100).toFixed(0)}% weight
           </span>
         </div>
         <span
