@@ -18,7 +18,11 @@ anthropic>=0.40.0
 
 # Production readiness
 redis>=5.0.0,<6.0.0
-slowapi>=0.1.9,<1.0.0
+# Rate limiting primitives (storage backends + window strategies). Used
+# directly by app/core/rate_limit.py; slowapi was dropped because its
+# middleware cannot resolve routes nested in Starlette's _IncludedRouter and
+# therefore silently exempted every API route.
+limits>=3.0.0,<6.0.0
 alembic>=1.13.0,<2.0.0
 sentry-sdk[fastapi]>=2.0.0,<3.0.0
 # Testing
