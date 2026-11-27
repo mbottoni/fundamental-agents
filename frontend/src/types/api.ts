@@ -121,10 +121,16 @@ export interface paths {
          * Start Analysis
          * @description Start a new stock analysis job for the given ticker.
          *
-         *     A recent completed analysis of the same ticker is returned as-is unless
-         *     `force` is set: the underlying filings are quarterly, so re-running minutes
-         *     later spends eleven provider requests and one of the user's daily analyses
-         *     to rebuild the same report. Free-tier users are limited to a daily cap.
+         *     A recent completed analysis of the same ticker is reused unless `force` is
+         *     set: the underlying filings are quarterly, so re-running minutes later
+         *     spends eleven provider requests to rebuild the same report. Free-tier users
+         *     are limited to a daily cap.
+         *
+         *     Reuse happens at two levels. The user's own recent analysis is returned
+         *     as-is — they already have that report. Failing that, any user's recent
+         *     analysis of the ticker is copied into a new job for this user: nothing in a
+         *     report depends on who asked for it, so rebuilding one costs eleven provider
+         *     requests to produce an identical document.
          */
         post: operations["start_analysis_api_v1_analysis__post"];
         delete?: never;
