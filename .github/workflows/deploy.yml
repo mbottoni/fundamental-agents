@@ -14,6 +14,24 @@ jobs:
       run:
         working-directory: ./backend
 
+    # The queue claims jobs with FOR UPDATE SKIP LOCKED, which SQLite cannot
+    # express. Without a real PostgreSQL the concurrency tests would skip, and
+    # a skipped test is not a test.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: stock-analyzer
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d stock-analyzer"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +54,22 @@ jobs:
           NEWS_API_KEY: test_key
           STRIPE_SECRET_KEY: sk_test_fake
           STRIPE_WEBHOOK_SECRET: whsec_fake
+          TEST_POSTGRES_URL: postgresql://user:password@localhost:5432/stock-analyzer
+
+      - name: Fail if the PostgreSQL queue tests were skipped
+        run: |
+          if pytest tests/test_job_queue_postgres.py -q --tb=no 2>&1 | grep -q "skipped"; then
+            echo "::error::The queue concurrency tests skipped — PostgreSQL was not reachable."
+            exit 1
+          fi
+        env:
+          SECRET_KEY: test-secret-key-that-is-at-least-32-characters-long-ok
+          DATABASE_URL: sqlite:///./test.db
+          FINANCIAL_MODELING_PREP_API_KEY: test_key
+          NEWS_API_KEY: test_key
+          STRIPE_SECRET_KEY: sk_test_fake
+          STRIPE_WEBHOOK_SECRET: whsec_fake
+          TEST_POSTGRES_URL: postgresql://user:password@localhost:5432/stock-analyzer
 
   # ── Frontend Lint + Build ──────────────────────────────────
   frontend-build:

@@ -49,7 +49,13 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 
 ### The analysis pipeline
 
-`POST /api/v1/analysis/` creates an `AnalysisJob` and schedules `run_analysis_background` as a FastAPI `BackgroundTask` (no Celery/queue). That task opens its **own** session via `get_standalone_session()` — request-scoped `get_db()` sessions are already closed by then — and runs `Orchestrator.run_analysis`.
+`POST /api/v1/analysis/` creates an `AnalysisJob` with status `pending` and returns. **Creating the row is the enqueue**: the job table doubles as the work queue (no Celery, no broker). A worker claims it, runs `Orchestrator.run_analysis`, and releases it.
+
+`app/services/job_queue.py` owns the claim logic. A worker takes a row with `FOR UPDATE SKIP LOCKED` (Postgres only — SQLite serialises writers anyway), holds a **lease** by refreshing `locked_at` from a heartbeat thread, and releases it when finished. A lease that stops being refreshed expires and the job is reclaimed rather than abandoned, which is what lets an analysis survive a deploy. Failures are retried up to `ANALYSIS_MAX_ATTEMPTS`; the user-facing `error_message` is only set once a job is genuinely finished with, so a retry in progress does not surface a failure that is about to be undone.
+
+`app/worker.py` is the loop. It runs **inline in the API process** by default (`ANALYSIS_WORKER_INLINE=true`) so `make up` still needs one container; production sets it false and runs `python -m app.worker` as its own service, so deploying the API does not interrupt an analysis. `ANALYSIS_WORKER_CONCURRENCY` caps parallel analyses — each fans out ~11 provider requests, so that cap is the main defence against the provider's rate limit.
+
+Anything the worker runs opens its **own** session (`SessionLocal`) — request-scoped `get_db()` sessions are closed by then, and the worker runs on threads outside the request lifecycle entirely.
 
 `backend/app/agents/orchestrator.py` is the spine. Each agent is a stateless class with a single `run()` that takes and returns plain dicts; they never touch the DB:
 
@@ -67,7 +73,7 @@ Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-d
 
 **Where to be careful:** the DCF must keep its equity bridge and its guard rails (negative FCF, the WACC-vs-terminal-growth spread, negative equity value) — each exists because removing it produces confident nonsense. The recommendation is capped by the valuation factor so quality and growth cannot outvote price entirely.
 
-The orchestrator writes job status at each stage (`pending → gathering_data → analyzing → generating_report → complete | failed`); the frontend dashboard polls `GET /api/v1/analysis/{id}` every 4s. Exceptions are caught and turned into a user-facing `error_message` on the job via `Orchestrator._failure_message`; raise `DataUnavailableError` with an explanatory message for anything the user could act on. Jobs left mid-flight by a restart are failed at startup by `_reap_interrupted_jobs`.
+The orchestrator writes job status at each stage (`pending → gathering_data → analyzing → generating_report → complete | failed`); the frontend dashboard polls `GET /api/v1/analysis/{id}`. Exceptions are caught and turned into a user-facing `error_message` on the job via `Orchestrator._failure_message`; raise `DataUnavailableError` with an explanatory message for anything the user could act on. Jobs left mid-flight by a restart are **reclaimed and retried** by `_recover_interrupted_jobs`, not failed — the user was charged a daily analysis when the job was created and should not have to spend another.
 
 Each completed analysis also writes an `AnalysisSnapshot` — the recommendation, score and price at that moment. It backs `/api/v1/history/*` (per-ticker history, past-call performance, leaderboard) and the watchlist alerts, and cannot be reconstructed after the fact.
 
