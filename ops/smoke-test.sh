@@ -59,7 +59,11 @@ finish() {
 }
 trap finish EXIT
 
-# --pull never: test the images just built, never whatever :latest is upstream.
+# The public images (Postgres, Caddy) are fetched if this machine lacks them.
+# The two app images never are: `--pull never` makes a missing one an error,
+# so the test can only ever run the images just built, not whatever the
+# registry has under the same tag.
+compose pull --quiet db caddy
 compose up -d --pull never
 
 # "ok" means the database answers, the migrations ran and the worker is alive.
