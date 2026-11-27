@@ -255,3 +255,7 @@ dist/
 # Local test artifacts
 test.db
 backend/test.db
+
+# Generated from the FastAPI app by scripts/dump_openapi.py; the committed
+# artifact is frontend/src/types/api.ts, not this intermediate.
+backend/openapi.json
