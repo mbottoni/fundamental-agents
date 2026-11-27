@@ -8,10 +8,18 @@ from ..schemas.analysis_job import AnalysisJobCreate
 
 
 def create_analysis_job(
-    db: Session, job: AnalysisJobCreate, user_id: int
+    db: Session, job: AnalysisJobCreate, user_id: int, status: Optional[str] = None
 ) -> AnalysisJob:
-    """Create a new analysis job for a user."""
+    """
+    Create a new analysis job for a user.
+
+    A job is queued (`pending`) unless a status is given. Creating the row is
+    what enqueues it, so a job that must not be run by a worker has to be
+    created in its final status, not moved there afterwards.
+    """
     db_job = AnalysisJob(ticker=job.ticker, user_id=user_id)
+    if status is not None:
+        db_job.status = status
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
@@ -34,20 +42,48 @@ def get_recent_complete_job(
     provider requests and one of the user's daily analyses, to produce the same
     report from the same quarterly filings.
     """
+    return _recent_complete(db, ticker, within_hours, user_id=user_id)
+
+
+def get_reusable_job(db: Session, ticker: str, within_hours: int) -> Optional[AnalysisJob]:
+    """
+    Anyone's most recent completed analysis of a ticker, if it is fresh.
+
+    The pipeline's output depends only on the ticker and the provider data
+    behind it — nothing in a report is specific to who asked for it — so two
+    users analysing the same ticker an hour apart were spending eleven provider
+    requests each to build byte-identical documents. Against a 250 call/day
+    quota that is the difference between serving twenty analyses a day and
+    serving hundreds.
+
+    Only jobs that actually produced a report qualify: a job can be 'complete'
+    with no report row if the report insert failed, and copying nothing would
+    hand the user an empty analysis.
+    """
+    return _recent_complete(db, ticker, within_hours, require_report=True)
+
+
+def _recent_complete(
+    db: Session,
+    ticker: str,
+    within_hours: int,
+    *,
+    user_id: Optional[int] = None,
+    require_report: bool = False,
+) -> Optional[AnalysisJob]:
     from datetime import datetime, timedelta, timezone
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=within_hours)
-    return (
-        db.query(AnalysisJob)
-        .filter(
-            AnalysisJob.user_id == user_id,
-            AnalysisJob.ticker == ticker.upper(),
-            AnalysisJob.status == "complete",
-            AnalysisJob.created_at >= cutoff,
-        )
-        .order_by(AnalysisJob.created_at.desc())
-        .first()
+    query = db.query(AnalysisJob).filter(
+        AnalysisJob.ticker == ticker.upper(),
+        AnalysisJob.status == "complete",
+        AnalysisJob.created_at >= cutoff,
     )
+    if user_id is not None:
+        query = query.filter(AnalysisJob.user_id == user_id)
+    if require_report:
+        query = query.filter(AnalysisJob.report.has())
+    return query.order_by(AnalysisJob.created_at.desc()).first()
 
 
 def get_user_jobs(db: Session, user_id: int) -> list[AnalysisJob]:
