@@ -9,7 +9,7 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 # Add the backend directory to sys.path so we can import the app
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -23,12 +23,18 @@ config = context.config
 # unconditionally meant migrations always ran against the environment's
 # database, whatever target was requested — including in tests.
 PLACEHOLDER_URL = "driver://user:pass@localhost/dbname"
+# Arbitrary, fixed: the key every process agrees on for "a migration is running".
+MIGRATION_LOCK_KEY = 7_203_118_045
 configured_url = config.get_main_option("sqlalchemy.url", None)
 if not configured_url or configured_url == PLACEHOLDER_URL:
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    # ConfigParser treats % as interpolation; a password may contain one.
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# alembic.ini sets up logging for the command line. When the app runs the
+# migrations itself (app/db/migrate.py) that would replace the app's handlers
+# and silence its loggers, so the app opts out.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
@@ -51,6 +57,10 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
+            # Two processes starting together must not both run the same
+            # revision. The lock is released when the transaction ends.
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
             context.run_migrations()
 
 

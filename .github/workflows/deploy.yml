@@ -56,10 +56,13 @@ jobs:
           STRIPE_WEBHOOK_SECRET: whsec_fake
           TEST_POSTGRES_URL: postgresql://user:password@localhost:5432/stock-analyzer
 
-      - name: Fail if the PostgreSQL queue tests were skipped
+      # Two things only PostgreSQL can show: that the queue never hands one job
+      # to two workers, and that the migrations build exactly the schema the
+      # models describe. A skipped test is not a test.
+      - name: Fail if the PostgreSQL tests were skipped
         run: |
-          if pytest tests/test_job_queue_postgres.py -q --tb=no 2>&1 | grep -q "skipped"; then
-            echo "::error::The queue concurrency tests skipped — PostgreSQL was not reachable."
+          if pytest tests/test_job_queue_postgres.py tests/test_migrations.py -q --tb=no -rs 2>&1 | grep -q "TEST_POSTGRES_URL is not set"; then
+            echo "::error::The PostgreSQL tests skipped — TEST_POSTGRES_URL was not set."
             exit 1
           fi
         env:

@@ -113,7 +113,16 @@ All FMP traffic goes through `app/core/market_data.py` — retries with backoff 
 
 Models use `TableNameMixin` (auto `__tablename__` = lowercase class name + "s") and `TimestampMixin` from `app/db/base_class.py`; every model must be imported in `app/db/base.py` so `Base.metadata` and Alembic autogenerate see it.
 
-The startup `lifespan` calls `Base.metadata.create_all()` **and** `_run_auto_migrations()` in `main.py`, a hand-rolled "add column if missing" block. `alembic/versions/` is currently empty, so that block is what actually keeps deployed databases current. Adding a column to an existing table means either a real Alembic revision or another entry there.
+**Alembic is the only thing that changes the schema.** The API's `lifespan` calls `upgrade_to_head()` (`app/db/migrate.py`) before anything else, so a deploy migrates itself, and a failed migration stops the process rather than serving requests against the wrong schema. `create_all()` survives only in `tests/conftest.py`, for the in-memory SQLite engine; do not bring it back to start-up, where it hid broken migrations by creating whatever they missed.
+
+Adding or changing a column means a new revision: `make migrate-create MSG="..."`, then read what autogenerate wrote. `make migrate-check` (`alembic check`) fails on drift, and `tests/test_migrations.py` does the same in CI against real PostgreSQL with nothing ignored — SQLite hides differences in types, defaults and constraints.
+
+Three things about `migrate.py` that are easy to undo by accident:
+- **A database newer than the code is left alone** (`schema_state() == "ahead"`). That is what a rollback looks like; Alembic cannot upgrade from a revision it cannot find, and refusing to start would make every rollback an outage.
+- **The app opts out of `alembic.ini`'s logging config** (`config.attributes["configure_logger"]`). Applied inside the running app it replaces the app's handlers.
+- **Only the API migrates.** The standalone worker waits for the schema (`worker.wait_for_schema`); `env.py` also takes a PostgreSQL advisory lock, so two processes starting together cannot both run a revision.
+
+Revisions 0001–0004 are idempotent (they skip what already exists) because the first databases were built by `create_all()`. New revisions do not need to be.
 
 ### Frontend
 

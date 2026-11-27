@@ -175,8 +175,39 @@ class Worker:
         logger.info("Analysis worker %s stopped", self.worker_id)
 
 
+def wait_for_schema(timeout_seconds: float = 180.0, poll_seconds: float = 2.0) -> None:
+    """
+    Block until the database has been migrated.
+
+    The API process applies migrations when it starts; this process only waits
+    for them. Claiming a job against a schema that is still missing a column
+    fails in ways that look like a broken queue rather than an unfinished
+    deploy, so the worker does not start polling until the schema is ready.
+    """
+    from .core.db import engine
+    from .db.migrate import schema_state
+
+    deadline = time.monotonic() + timeout_seconds
+    state = "behind"
+    while time.monotonic() < deadline:
+        try:
+            state = schema_state(engine)
+        except Exception as e:  # noqa: BLE001 - the database may still be starting
+            root_logger.info("Waiting for the database: %s", e)
+        else:
+            if state != "behind":
+                return
+            root_logger.info("Waiting for the API to migrate the database...")
+        time.sleep(poll_seconds)
+    raise SystemExit(
+        f"The database schema was still {state!r} after {timeout_seconds:.0f}s. "
+        "The API process applies migrations at start-up; check that it is running."
+    )
+
+
 def main() -> None:
     root_logger.info("Starting standalone analysis worker...")
+    wait_for_schema()
     worker = Worker()
     try:
         worker.run_forever()

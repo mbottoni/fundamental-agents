@@ -2,7 +2,7 @@
        shell-backend shell-frontend shell-db \
        health test test-backend test-ci gen-types \
        clean clean-volumes reset \
-       migrate migrate-create \
+       migrate migrate-create migrate-history migrate-check \
        prod-up prod-down \
        secret-key db-tables db-users db-jobs
 
@@ -112,6 +112,9 @@ migrate-create: ## Create a new migration (usage: make migrate-create MSG="add f
 
 migrate-history: ## Show migration history
 	docker-compose exec backend alembic history
+
+migrate-check: ## Fail if the models and the migrations have drifted apart
+	docker-compose exec backend alembic check
 
 # ══════════════════════════════════════════════════════════════
 # Quick Smoke Tests
