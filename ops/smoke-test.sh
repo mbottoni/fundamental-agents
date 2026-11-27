@@ -22,6 +22,10 @@ WORK="$(mktemp -d)"
 BASE="http://127.0.0.1:${PORT}"
 
 cp "$ROOT/docker-compose.prod.yml" "$ROOT/Caddyfile" "$WORK/"
+# The deploy copies ops/backup.sh to the server as backup.sh, beside the
+# compose file, which mounts it into the backup service.
+cp "$ROOT/ops/backup.sh" "$WORK/backup.sh"
+mkdir -p "$WORK/backups"
 cat > "$WORK/.env.prod" <<EOF
 SITE_ADDRESS=:80
 FRONTEND_URL=https://smoke.example.com
@@ -48,13 +52,15 @@ finish() {
   status=$?
   if [ "$status" -ne 0 ] || [ "$failed" -ne 0 ]; then
     echo "----- container status -----"; compose ps -a || true
-    for service in api worker web caddy; do
+    for service in api worker web caddy backup; do
       echo "----- $service (last 40 lines) -----"
       compose logs --no-color --tail 40 "$service" 2>&1 | grep -v "alembic.runtime.plugins" || true
     done
   fi
   compose down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$WORK"
+  # On Linux the dumps belong to the container's postgres user, so removing
+  # them can fail. A leftover temp directory must not fail the test.
+  rm -rf "$WORK" 2>/dev/null || true
   [ "$status" -eq 0 ] && [ "$failed" -eq 0 ] || exit 1
 }
 trap finish EXIT
@@ -103,6 +109,17 @@ code="$(status_of -X POST "$BASE/api/v1/auth/register" -H 'Content-Type: applica
 [ "$code" = "201" ] && pass "an account can be registered" || fail "register returned $code, expected 201"
 code="$(status_of -X POST "$BASE/api/v1/auth/login" -d "username=$email&password=SmokeTest123")"
 [ "$code" = "200" ] && pass "and can sign in" || fail "login returned $code, expected 200"
+
+# A backup nobody has restored is a hope, not a backup. Take a dump of the
+# database that now holds that account, restore it into a scratch database
+# and compare every table with the live one.
+if compose exec -T backup sh /backup.sh once >/dev/null 2>&1 \
+   && compose exec -T backup sh /backup.sh verify 2>&1 | grep -q "restore check passed"; then
+  pass "a dump can be taken and restored"
+else
+  fail "the backup could not be taken or did not restore"
+  compose logs --no-color --tail 20 backup || true
+fi
 
 type="$(curl -s -o /dev/null -m 20 -w '%{content_type}' -H 'Accept: image/webp,*/*' \
   "$BASE/_next/image?url=%2Fmountain.jpg&w=640&q=75")"

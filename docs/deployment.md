@@ -55,6 +55,7 @@ It runs the images CI already built for that commit, with that commit's compose 
 | `DEPLOY_URL` (the site's origin; the health check uses it) | GitHub Actions variable |
 | App secrets, `SITE_ADDRESS`, the database password | `/opt/fundamental-agents/.env.prod` on the server |
 | Database | `fundamental-agents_pgdata` Docker volume on the server |
+| Database dumps | `/opt/fundamental-agents/backups/` on the server, and the bucket once configured |
 | TLS certificates | `fundamental-agents_caddy_data` Docker volume on the server |
 
 ## Setting up a new server
@@ -151,6 +152,42 @@ curl -s https://<domain>/healthz
 
 With no worker, every analysis stays `pending`. `$C up -d worker` starts it; jobs that were claimed by a worker that died are picked up again once their lease expires (five minutes).
 
+## Backups
+
+The `backup` service (`ops/backup.sh`) runs `pg_dump` every night at 03:00 UTC into `/opt/fundamental-agents/backups/` on the server, keeps the newest 14, and takes one at start-up if there is none from today. Each dump is written under a temporary name and checked with `pg_restore --list` before it is kept, so an interrupted dump never looks like a finished one.
+
+The database holds accounts, subscription state and the `AnalysisSnapshot` history: what the model recommended and the price at that moment. Those rows cannot be rebuilt afterwards.
+
+**These dumps are on the same server as the database.** They cover a bad migration or a mistaken delete, not the loss of the server. For an off-box copy, create a bucket on S3-compatible storage and add to `.env.prod`:
+
+```bash
+BACKUP_S3_BUCKET=fundamental-agents-backups
+BACKUP_S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+BACKUP_S3_ACCESS_KEY_ID=...
+BACKUP_S3_SECRET_ACCESS_KEY=...
+# BACKUP_S3_PROVIDER=Cloudflare   # or AWS, Backblaze, Other
+```
+
+then `$C up -d backup`. Every later dump is uploaded too, and copies older than 60 days are removed.
+
+```bash
+$C exec backup sh /backup.sh once      # take a dump now
+$C exec backup sh /backup.sh verify    # restore the newest dump into a scratch database and compare
+$C logs backup                         # what ran, and any UPLOAD FAILED / BACKUP FAILED
+```
+
+The first dump after a brand-new deploy can be of an empty database, taken before the API had created the tables. Run `once` after the first deploy, or wait for 03:00.
+
+**To restore for real** (this replaces the live data; stop everything that writes first):
+
+```bash
+$C stop api worker
+$C exec backup sh -c 'dropdb app && createdb app && pg_restore --no-owner -d app /backups/<file>.dump'
+$C start api worker
+```
+
+CI takes a dump and restores it on every run, as part of the smoke test.
+
 ## Running the production stack locally
 
 ```bash
@@ -165,4 +202,4 @@ make prod-down
 
 ## Not set up yet
 
-Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): database backups, an uptime check, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
+Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): off-box backup storage, an uptime check, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
