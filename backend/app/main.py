@@ -29,7 +29,8 @@ from .api.v1 import (
 from .core.config import logger, settings
 from .core.db import engine
 from .core.rate_limit import RateLimitMiddleware
-from .db.base import Base
+from .db import base as _models  # noqa: F401 - registers every model
+from .db.migrate import current_revision, head_revision, upgrade_to_head
 
 
 # ── Sentry (optional) ─────────────────────────────────────────
@@ -67,54 +68,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if "localhost" not in settings.FRONTEND_URL:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
-
-
-# ── Database Startup Migration ────────────────────────────────
-
-def _run_auto_migrations() -> None:
-    """
-    Lightweight auto-migration for columns added after initial schema.
-    For a real production system, use `alembic upgrade head` instead.
-    """
-    from sqlalchemy import text, inspect as sa_inspect
-
-    with engine.connect() as conn:
-        inspector = sa_inspect(engine)
-
-        # reports.chart_data
-        report_cols = [c["name"] for c in inspector.get_columns("reports")]
-        if "chart_data" not in report_cols:
-            conn.execute(text("ALTER TABLE reports ADD COLUMN chart_data TEXT"))
-            logger.info("Migration: added chart_data column to reports.")
-
-        # users.is_verified
-        user_cols = [c["name"] for c in inspector.get_columns("users")]
-        if "is_verified" not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT false"))
-            logger.info("Migration: added is_verified column to users.")
-
-        # analysissnapshots is created by create_all(); nothing to patch here.
-
-        # analysisjobs.error_message
-        job_cols = [c["name"] for c in inspector.get_columns("analysisjobs")]
-        if "error_message" not in job_cols:
-            conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN error_message TEXT"))
-            logger.info("Migration: added error_message column to analysisjobs.")
-
-        # analysisjobs queue bookkeeping
-        if "attempts" not in job_cols:
-            conn.execute(
-                text("ALTER TABLE analysisjobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
-            )
-            logger.info("Migration: added attempts column to analysisjobs.")
-        if "locked_at" not in job_cols:
-            conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN locked_at TIMESTAMPTZ"))
-            logger.info("Migration: added locked_at column to analysisjobs.")
-        if "locked_by" not in job_cols:
-            conn.execute(text("ALTER TABLE analysisjobs ADD COLUMN locked_by VARCHAR"))
-            logger.info("Migration: added locked_by column to analysisjobs.")
-
-        conn.commit()
 
 
 def _recover_interrupted_jobs() -> None:
@@ -185,9 +138,18 @@ async def _watchlist_sweep() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Stock Analyzer AI...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables verified.")
-    _run_auto_migrations()
+    # Alembic is the only thing that changes the schema; a deploy migrates
+    # itself here. A failure is fatal on purpose: serving requests against a
+    # schema the code was not written for corrupts data quietly.
+    state = upgrade_to_head(engine)
+    if state == "ahead":
+        logger.warning(
+            "The database is at revision %s, newer than this code (%s). Running "
+            "as a rollback: no migration was applied.",
+            current_revision(engine), head_revision(),
+        )
+    else:
+        logger.info("Database schema is at revision %s.", head_revision())
     _recover_interrupted_jobs()
 
     import asyncio
