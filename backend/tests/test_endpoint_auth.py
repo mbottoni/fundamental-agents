@@ -78,7 +78,7 @@ def test_authenticated_requests_are_served(client: TestClient, auth_headers, pat
 class TestPublicRoutes:
     """Health and auth must stay reachable."""
 
-    @pytest.mark.parametrize("path", ["/health", "/"])
+    @pytest.mark.parametrize("path", ["/healthz", "/"])
     def test_health_is_public(self, client: TestClient, path: str):
         assert client.get(path).status_code == 200
 

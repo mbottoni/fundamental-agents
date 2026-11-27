@@ -7,9 +7,10 @@ Sentry monitoring, database initialization, and all API routers.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api.v1 import (
@@ -27,9 +28,10 @@ from .api.v1 import (
     endpoints_watchlist,
 )
 from .core.config import logger, settings
-from .core.db import engine
+from .core.db import engine, get_db
 from .core.rate_limit import RateLimitMiddleware
 from .db import base as _models  # noqa: F401 - registers every model
+from .services import health
 from .db.migrate import current_revision, head_revision, upgrade_to_head
 
 
@@ -172,6 +174,7 @@ async def lifespan(app: FastAPI):
             target=worker.run_forever, name="inline-analysis-worker", daemon=True
         )
         worker_thread.start()
+        app.state.inline_worker_thread = worker_thread
         logger.info("Inline analysis worker started.")
     else:
         logger.info("Inline worker disabled; expecting a standalone worker process.")
@@ -244,6 +247,14 @@ def root():
     return {"name": "Stock Analyzer AI", "version": "2.0.0", "docs": "/docs"}
 
 
-@app.get("/health", tags=["Health"])
-def health_check():
-    return {"status": "healthy"}
+@app.get("/healthz", tags=["Health"])
+def healthz(request: Request, db: Session = Depends(get_db)):
+    """
+    Whether the site can do its job: database reachable, schema at the
+    revision this code expects, a worker alive to run analyses.
+
+    Always 200, with `status` either "ok" or "degraded" and the reason in the
+    other fields, so a failing probe says what is wrong. Consumers check
+    `status`, not the status code.
+    """
+    return health.check(db, inline_thread=getattr(request.app.state, "inline_worker_thread", None))

@@ -121,7 +121,7 @@ migrate-check: ## Fail if the models and the migrations have drifted apart
 # ══════════════════════════════════════════════════════════════
 
 health: ## Check backend health endpoint
-	@curl -s http://localhost:8000/health | python3 -m json.tool
+	@curl -s http://localhost:8000/healthz | python3 -m json.tool
 
 test-register: ## Register a test user
 	@curl -s -X POST http://localhost:8000/api/v1/auth/register \
