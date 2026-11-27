@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 30
     # Off only where a test needs to make many calls in quick succession.
     RATE_LIMIT_ENABLED: bool = True
+    # Who may create an account.
+    #   open    anyone
+    #   invite  only the addresses in REGISTRATION_ALLOWLIST (comma-separated)
+    #   closed  nobody
+    # The market-data plan allows 250 requests a day and an analysis costs about
+    # eleven, so a handful of new free accounts can spend the day's quota for
+    # everyone, paying users included. A new deployment should start on invite.
+    REGISTRATION_MODE: Literal["open", "invite", "closed"] = "open"
+    REGISTRATION_ALLOWLIST: str = ""
     FREE_TIER_DAILY_ANALYSES: int = 3
     # A repeat analysis of the same ticker within this window returns the
     # existing report instead of re-running the pipeline.

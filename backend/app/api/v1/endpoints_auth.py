@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
 from app.core import security, email as email_service
+from app.core.config import settings
 from app.core.db import get_db
 from app.api.deps import get_current_user
 
@@ -17,9 +18,34 @@ router = APIRouter()
 
 # ── Registration ──────────────────────────────────────────────
 
+def _invited(email: str) -> bool:
+    allowlist = {e.strip().lower() for e in settings.REGISTRATION_ALLOWLIST.split(",") if e.strip()}
+    return email.strip().lower() in allowlist
+
+
+@router.get("/registration")
+def registration_status():
+    """
+    Whether new accounts can be created, so the sign-up page can say so
+    before someone fills in the form.
+    """
+    return {"mode": settings.REGISTRATION_MODE}
+
+
 @router.post("/register", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Register a new user account and send a verification email."""
+    if settings.REGISTRATION_MODE == "closed":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is closed for now.",
+        )
+    if settings.REGISTRATION_MODE == "invite" and not _invited(user.email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is by invitation for now, and this address has not been invited.",
+        )
+
     existing_user = crud.get_user_by_email(db, email=user.email)
     if existing_user:
         raise HTTPException(

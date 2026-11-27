@@ -89,6 +89,8 @@ It runs the images CI already built for that commit, with that commit's compose 
    STRIPE_SECRET_KEY=sk_test_...
    STRIPE_WEBHOOK_SECRET=whsec_...
    PREMIUM_EMAILS=
+   REGISTRATION_MODE=invite
+   REGISTRATION_ALLOWLIST=you@example.com
    ```
 
    `POSTGRES_PASSWORD` is placed inside the database URL, so keep it to letters and digits. Use Stripe **test** keys until the go-live checklist is done.
@@ -120,6 +122,8 @@ Read from `.env.prod`. The app refuses to start without the first five.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAILS_FROM_ADDRESS` | Optional | -- | Outgoing email. Unset, nothing is sent: no verification, no password reset. See *What production refuses* for verifying by hand |
 | `ANTHROPIC_API_KEY` | Optional | -- | Turns on the written summary at the top of each report |
 | `SENTRY_DSN` | Optional | -- | Error tracking. Unset means off |
+| `REGISTRATION_MODE` | Set it | `open` | `open`, `invite` (only the addresses in `REGISTRATION_ALLOWLIST`) or `closed`. Start a new deployment on `invite` |
+| `REGISTRATION_ALLOWLIST` | With `invite` | empty | Comma-separated addresses allowed to sign up |
 | `FREE_TIER_DAILY_ANALYSES` | No | `3` | Daily analyses for a free account |
 | `RATE_LIMIT_PER_MINUTE` | No | `30` | Requests a minute per signed-in user, or per address when signed out |
 | `ANALYSIS_REUSE_HOURS` | No | `12` | A completed analysis of a ticker is reused, for anyone, for this long |
@@ -229,4 +233,4 @@ gh workflow run uptime.yml -f url=https://example.invalid/healthz
 
 ## Not set up yet
 
-Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): off-box backup storage, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
+Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): off-box backup storage, and a daily budget for provider requests. Until then, keep `REGISTRATION_MODE=invite` and Stripe test keys.
