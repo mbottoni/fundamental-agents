@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,16 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  // 'open' until the API says otherwise, so a failed status request never
+  // hides a form that would have worked.
+  const [mode, setMode] = useState<'open' | 'invite' | 'closed'>('open');
+
+  useEffect(() => {
+    api
+      .get('/auth/registration')
+      .then(({ data }) => setMode(data.mode))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +95,25 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {mode === 'closed' && (
+          <div
+            role="status"
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80 text-center"
+          >
+            Registration is closed for now. If you already have an account, you can sign in.
+          </div>
+        )}
+
+        {mode === 'invite' && (
+          <div
+            role="status"
+            className="mb-4 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80"
+          >
+            Registration is by invitation for now. Use the email address you were invited with.
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className={mode === 'closed' ? 'hidden' : 'space-y-4'}>
           <div>
             <label htmlFor="email" className="block text-gray-400 mb-1.5 text-sm font-medium">
               Email
