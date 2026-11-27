@@ -11,10 +11,9 @@ from app.core.security import decode_access_token
 
 reusable_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-# Pre-compute the set of emails that always get premium access.
-_PREMIUM_EMAILS: set[str] = {
-    e.strip().lower() for e in settings.PREMIUM_EMAILS.split(",") if e.strip()
-}
+def premium_emails() -> set[str]:
+    """The addresses configured to always have premium, lower-cased."""
+    return {e.strip().lower() for e in settings.PREMIUM_EMAILS.split(",") if e.strip()}
 
 
 def get_current_user(
@@ -40,8 +39,15 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # Grant permanent premium access to configured emails.
-    if user.email.lower() in _PREMIUM_EMAILS and user.subscription_status != "active":
+    # Grant permanent premium access to configured addresses, but only once
+    # the address is verified. Registration does not prove ownership, so
+    # without this, typing a listed address into the sign-up form before its
+    # owner does would be enough to be given premium.
+    if (
+        user.is_verified
+        and user.subscription_status != "active"
+        and user.email.lower() in premium_emails()
+    ):
         user.subscription_status = "active"
         db.commit()
         db.refresh(user)

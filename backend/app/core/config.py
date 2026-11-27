@@ -33,8 +33,10 @@ class Settings(BaseSettings):
     APP_VERSION: str = "dev"
     LOG_LEVEL: str = "INFO"
 
-    # Comma-separated list of emails that always get premium features.
-    PREMIUM_EMAILS: str = "maruanbakriottoni@gmail.com"
+    # Comma-separated addresses that always get premium, once verified. Empty
+    # by default on purpose: a default address here is published with the
+    # source, and granted premium on every deployment that forgets to set it.
+    PREMIUM_EMAILS: str = ""
 
     # --- Rate Limiting ---
     # Requests per minute per caller. Authenticated callers are counted per
