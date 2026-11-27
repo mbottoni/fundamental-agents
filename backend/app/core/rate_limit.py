@@ -53,7 +53,7 @@ logger = logging.getLogger("stock_analyzer.rate_limit")
 EXEMPT_PATHS = frozenset(
     {
         "/",
-        "/health",
+        "/healthz",
         "/docs",
         "/redoc",
         "/openapi.json",

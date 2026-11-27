@@ -811,15 +811,23 @@ export interface paths {
         patch: operations["update_watchlist_item_api_v1_watchlist__item_id__patch"];
         trace?: never;
     };
-    "/health": {
+    "/healthz": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Health Check */
-        get: operations["health_check_health_get"];
+        /**
+         * Healthz
+         * @description Whether the site can do its job: database reachable, schema at the
+         *     revision this code expects, a worker alive to run analyses.
+         *
+         *     Always 200, with `status` either "ok" or "degraded" and the reason in the
+         *     other fields, so a failing probe says what is wrong. Consumers check
+         *     `status`, not the status code.
+         */
+        get: operations["healthz_healthz_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2545,7 +2553,7 @@ export interface operations {
             };
         };
     };
-    health_check_health_get: {
+    healthz_healthz_get: {
         parameters: {
             query?: never;
             header?: never;

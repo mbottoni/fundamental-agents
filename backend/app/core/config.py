@@ -28,6 +28,9 @@ class Settings(BaseSettings):
 
     # --- Application ---
     FRONTEND_URL: str = "http://localhost:3000"
+    # The commit this build was made from; the image sets it. Reported by
+    # /healthz so a deploy can be seen to have taken effect.
+    APP_VERSION: str = "dev"
     LOG_LEVEL: str = "INFO"
 
     # Comma-separated list of emails that always get premium features.
@@ -72,6 +75,11 @@ class Settings(BaseSettings):
     # where it keeps `make up` to one container; production runs the worker as
     # its own service so an API deploy does not interrupt it.
     ANALYSIS_WORKER_INLINE: bool = True
+    # A standalone worker records that it is alive this often, and /healthz
+    # reports "degraded" once the newest record is older than the second value:
+    # with no worker, every analysis stays pending forever.
+    WORKER_HEARTBEAT_SECONDS: int = 15
+    WORKER_HEARTBEAT_STALE_SECONDS: int = 90
 
     # --- Caching (optional) ---
     # Set to share the market-data cache across gunicorn workers; without it

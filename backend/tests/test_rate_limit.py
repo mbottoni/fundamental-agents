@@ -135,11 +135,11 @@ class TestEnforcement:
 
     def test_health_check_is_exempt(self, client: TestClient, limited):
         """
-        A monitor polling /health must not lock users out from its address.
+        A monitor polling /healthz must not lock users out from its address.
 
         Exhausts a normal route first, so this cannot pass merely because
         nothing is being enforced — the limiter is demonstrably active by the
-        time /health is polled.
+        time /healthz is polled.
         """
         codes = [
             client.get("/api/v1/dashboard/stats").status_code
@@ -148,7 +148,7 @@ class TestEnforcement:
         assert 429 in codes, "precondition: the limiter must be active"
 
         health = [
-            client.get("/health").status_code
+            client.get("/healthz").status_code
             for _ in range(settings.RATE_LIMIT_PER_MINUTE + 10)
         ]
         assert set(health) == {200}

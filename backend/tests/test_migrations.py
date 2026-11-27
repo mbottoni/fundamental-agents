@@ -70,23 +70,32 @@ def test_columns_added_by_the_startup_patcher_are_present(migrated_engine):
     assert "error_message" in {c["name"] for c in inspector.get_columns("analysisjobs")}
 
 
-def test_upgrade_is_idempotent_against_an_existing_schema(tmp_path):
+# Every table that existed when start-up still called create_all(). Tables
+# added since then can only ever be created by their own revision.
+PRE_ALEMBIC_TABLES = (
+    "users", "analysisjobs", "reports", "watchlistitems", "analysissnapshots", "alerts",
+)
+
+
+def test_a_database_built_before_alembic_can_be_adopted(tmp_path):
     """
-    Deployed databases were built by create_all(); running the baseline against
-    them must not fail, so the release can stamp or upgrade either way.
+    The first databases were built by create_all() and have no version table.
+    `upgrade head` must adopt one as it stands: revisions 0001 to 0004 skip
+    what is already there, and later ones add what is not.
     """
     import app.db.base  # noqa: F401
+    from app.db import migrate
 
-    db_path = tmp_path / "existing.db"
-    url = f"sqlite:///{db_path}"
-    engine = create_engine(url)
-    Base.metadata.create_all(bind=engine)
-    engine.dispose()
-
-    config = Config(str(BACKEND_ROOT / "alembic.ini"))
-    config.set_main_option("script_location", str(BACKEND_ROOT / "alembic"))
-    config.set_main_option("sqlalchemy.url", url)
-    command.upgrade(config, "head")  # must not raise
+    engine = create_engine(f"sqlite:///{tmp_path / 'existing.db'}")
+    Base.metadata.create_all(
+        bind=engine, tables=[Base.metadata.tables[name] for name in PRE_ALEMBIC_TABLES]
+    )
+    try:
+        assert migrate.schema_state(engine) == "behind"
+        assert migrate.upgrade_to_head(engine) == "current"  # must not raise
+        assert set(Base.metadata.tables) <= set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
 
 
 # ── The app runs the migrations itself (app/db/migrate.py) ────────────────

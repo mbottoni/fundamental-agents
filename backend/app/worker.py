@@ -27,7 +27,7 @@ from typing import Optional
 from .agents.orchestrator import Orchestrator
 from .core.config import logger as root_logger, settings
 from .core.db import SessionLocal
-from .services import job_queue
+from .services import health, job_queue
 
 logger = logging.getLogger("stock_analyzer.worker")
 
@@ -143,12 +143,23 @@ class Worker:
         executor.submit(_run_one, job_id, ticker).add_done_callback(self._finished)
         return True
 
+    def beat(self) -> None:
+        """Record that this worker is alive. Never raises."""
+        db = SessionLocal()
+        try:
+            health.record_heartbeat(db, self.worker_id)
+        except Exception as e:  # noqa: BLE001 - a missed beat must not stop work
+            logger.warning("Could not record a worker heartbeat: %s", e)
+        finally:
+            db.close()
+
     def run_forever(self) -> None:
         logger.info(
             "Analysis worker %s started (concurrency=%d, poll=%ss)",
             self.worker_id, self.concurrency, settings.ANALYSIS_POLL_SECONDS,
         )
         last_reclaim = 0.0
+        last_heartbeat = float("-inf")
         with ThreadPoolExecutor(
             max_workers=self.concurrency, thread_name_prefix="analysis"
         ) as executor:
@@ -163,6 +174,11 @@ class Worker:
                             job_queue.reclaim_expired_jobs(db)
                         finally:
                             db.close()
+
+                    # Tell /healthz there is a worker, busy or not.
+                    if now - last_heartbeat >= settings.WORKER_HEARTBEAT_SECONDS:
+                        last_heartbeat = now
+                        self.beat()
 
                     # Drain what is available before sleeping again.
                     while self.run_once(executor) and not self._stop.is_set():

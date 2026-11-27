@@ -85,6 +85,8 @@ The frontend no longer retypes that shape. `frontend/src/types/api.ts` is **gene
 
 When adding an agent: write the class with `run()`, instantiate it in `Orchestrator.__init__`, call it in `run_analysis`, and thread its output into both `_build_chart_data` and `SynthesisReportingAgent.run`. If it produces something the recommendation should weigh, add a factor in `recommendation.py` rather than special-casing it in the report.
 
+**Health:** `GET /healthz` (`app/services/health.py`) is what the deploy gate, the container health check and the uptime check read. It answers 200 with `status` "ok" or "degraded" and says why: database reachable, schema `current` (or `ahead`, a rollback), and a worker alive. A standalone worker writes a `WorkerHeartbeat` row every `WORKER_HEARTBEAT_SECONDS`; an idle queue otherwise looks the same with a worker as without one. It makes no provider call, and must not gain one: it is polled every few seconds against a 250-request daily quota.
+
 **Background work:** a periodic asyncio task in `lifespan` sweeps every watchlist for alerts (`ALERT_SWEEP_MINUTES`, 0 disables). It runs the blocking evaluation in a worker thread and survives its own failures.
 
 **Verifying against the live API:** unit tests stub all HTTP, so FMP field names and endpoint paths are only checked by running the pipeline for real. `Orchestrator(...).data_agent.run(ticker)` plus the agents, with no DB, is enough to catch a renamed field — that is how the `dividends` endpoint 404 and the zero-interest-coverage issue were found.
