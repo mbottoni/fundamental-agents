@@ -159,16 +159,24 @@ class TestCheckoutSession:
         response = client.post("/api/v1/stripe/create-checkout-session", headers=auth_headers)
         assert response.status_code == 503
 
-    def test_session_id_is_returned(self, client: TestClient, auth_headers, monkeypatch):
+    def test_the_hosted_checkout_url_is_returned(self, client: TestClient, auth_headers, monkeypatch):
         monkeypatch.setattr(endpoints_stripe.settings, "STRIPE_PREMIUM_PRICE_ID", "price_123")
         monkeypatch.setattr(
             endpoints_stripe.stripe.checkout.Session,
             "create",
-            classmethod(lambda cls, **kwargs: type("S", (), {"id": "cs_test_123"})()),
+            classmethod(
+                lambda cls, **kwargs: type(
+                    "S", (), {"id": "cs_test_123", "url": "https://checkout.stripe.com/c/pay/cs_test_123"}
+                )()
+            ),
         )
         response = client.post("/api/v1/stripe/create-checkout-session", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json()["sessionId"] == "cs_test_123"
+        assert response.json() == {
+            "sessionId": "cs_test_123",
+            # The frontend navigates here; it has no Stripe key of its own.
+            "url": "https://checkout.stripe.com/c/pay/cs_test_123",
+        }
 
     def test_provider_errors_are_not_leaked(self, client: TestClient, auth_headers, monkeypatch):
         monkeypatch.setattr(endpoints_stripe.settings, "STRIPE_PREMIUM_PRICE_ID", "price_123")

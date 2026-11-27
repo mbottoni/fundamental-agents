@@ -1,31 +1,32 @@
-# ── Caddy Reverse Proxy Configuration ────────────────────────
-# Replace yourdomain.com with your actual domain.
-# Caddy automatically provisions TLS certificates via Let's Encrypt.
+# One hostname for the site and the API. SITE_ADDRESS comes from .env.prod
+# (e.g. example.com), so this file names no domain. Caddy obtains and renews
+# the certificate.
+#
+# Only /api/* and /healthz reach the backend. Its interactive documentation
+# (/docs, /redoc, /openapi.json) is therefore not reachable from outside.
+{$SITE_ADDRESS} {
+	encode gzip
 
-yourdomain.com {
-    # Frontend
-    reverse_proxy frontend:3000
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
 
-    # Security headers (Caddy adds most by default)
-    header {
-        X-Content-Type-Options nosniff
-        X-Frame-Options DENY
-        Referrer-Policy strict-origin-when-cross-origin
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-    }
-}
+	# Caddy sets X-Forwarded-For/Proto/Host by default. The backend honours
+	# them only because it runs with --forwarded-allow-ips (see
+	# docker-compose.prod.yml); without that it would see this container as
+	# the client of every request, and per-client rate limiting would become
+	# one shared bucket.
+	@api path /api/* /healthz
+	handle @api {
+		reverse_proxy api:8000
+	}
 
-api.yourdomain.com {
-    # Backend API.
-    #
-    # Caddy sets X-Forwarded-For/Proto/Host on reverse_proxy by default. The
-    # backend only honours them when started with --forwarded-allow-ips (see
-    # docker-compose.prod.yml); without that flag it sees this container's
-    # address as the client for every request and rate limiting breaks.
-    reverse_proxy backend:8000
-
-    header {
-        X-Content-Type-Options nosniff
-        X-Frame-Options DENY
-    }
+	handle {
+		reverse_proxy web:3000
+	}
 }

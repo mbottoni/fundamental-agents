@@ -40,10 +40,10 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements*.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
 
       - name: Run tests
         run: pytest --tb=short -q
@@ -87,7 +87,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -118,17 +118,17 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements*.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install backend dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r backend/requirements-dev.txt
 
       - name: Install frontend dependencies
         run: npm ci
@@ -180,10 +180,11 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./backend
+          build-args: APP_VERSION=${{ github.sha }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/stock-analyzer-backend:latest
-            ghcr.io/${{ github.repository_owner }}/stock-analyzer-backend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/fundamental-agents-api:latest
+            ghcr.io/${{ github.repository_owner }}/fundamental-agents-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -193,7 +194,7 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/stock-analyzer-frontend:latest
-            ghcr.io/${{ github.repository_owner }}/stock-analyzer-frontend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/fundamental-agents-web:latest
+            ghcr.io/${{ github.repository_owner }}/fundamental-agents-web:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

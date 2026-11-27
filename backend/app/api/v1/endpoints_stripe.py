@@ -36,7 +36,10 @@ def create_checkout_session(
             customer_email=current_user.email,
             client_reference_id=str(current_user.id),
         )
-        return {"sessionId": checkout_session.id}
+        # `url` is Stripe's hosted checkout page. The frontend navigates to it,
+        # so it needs neither stripe.js nor a publishable key baked into its
+        # build. `sessionId` stays for anything still calling the old way.
+        return {"sessionId": checkout_session.id, "url": checkout_session.url}
     except stripe.error.StripeError as e:
         logger.error("Stripe checkout error for user %d: %s", current_user.id, e)
         raise HTTPException(
