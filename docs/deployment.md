@@ -115,7 +115,7 @@ Read from `.env.prod`. The app refuses to start without the first five.
 | `SITE_ADDRESS` | Yes | -- | The hostname Caddy serves. No scheme |
 | `FRONTEND_URL` | Yes in practice | `http://localhost:3000` | The site's origin. Links in emails and Stripe return URLs are built from it; left at the default, they point at localhost |
 | `STRIPE_PREMIUM_PRICE_ID` | For payments | -- | The Stripe Price of the premium plan. Without it checkout answers 503 |
-| `PREMIUM_EMAILS` | Set it | a personal address | Comma-separated addresses that always get premium. Set it explicitly, even to empty |
+| `PREMIUM_EMAILS` | Optional | empty | Comma-separated addresses that always get premium, once the address is verified. With SMTP unset the verification link is in the API's log |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAILS_FROM_ADDRESS` | Optional | -- | Outgoing email. Unset, verification and reset links are written to the log instead of sent |
 | `ANTHROPIC_API_KEY` | Optional | -- | Turns on the written summary at the top of each report |
 | `SENTRY_DSN` | Optional | -- | Error tracking. Unset means off |
@@ -200,6 +200,16 @@ make prod-down
 
 `SITE_ADDRESS=:80` makes Caddy serve plain HTTP and ask for no certificate.
 
+## Uptime check
+
+`.github/workflows/uptime.yml` asks `<DEPLOY_URL>/healthz` for a healthy answer every five minutes, from GitHub's network. Three failed attempts over about a minute open an issue labelled `outage`, assigned to the repository owner, so GitHub sends an email. While the site stays down it adds one comment an hour; the first healthy check records the recovery time and closes the issue. It does nothing until `DEPLOY_URL` is set.
+
+It is a floor, not a full monitor: GitHub often runs scheduled workflows several minutes late, and stops scheduling them after 60 days without a commit. To test the alert:
+
+```bash
+gh workflow run uptime.yml -f url=https://example.invalid/healthz
+```
+
 ## Not set up yet
 
-Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): off-box backup storage, an uptime check, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
+Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): off-box backup storage, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
