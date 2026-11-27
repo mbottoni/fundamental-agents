@@ -26,7 +26,7 @@ cd backend && pytest -k "free_tier"                                  # by name
 
 The agent tests (`test_valuation`, `test_risk`, `test_metrics`, `test_recommendation`, `test_peer_comparison`, `test_sentiment`, `test_data_gathering`, `test_synthesis`) are pure and fast — no network, no database. `conftest.py` still loads the app, so they need the full dependency set installed.
 
-Frontend checks (what CI runs — `.github/workflows/deploy.yml`):
+Frontend checks (what CI runs — `.github/workflows/ci.yml`):
 
 ```bash
 cd frontend && npm run lint && npm run build
@@ -46,6 +46,7 @@ Production stack, run locally from images built here (needs a `.env.prod`, see `
 ```bash
 make prod-up        # build both images, start api + worker + web + db + caddy on :8080
 make prod-up PROD_PORT=18080
+make smoke          # what CI runs before pushing an image (ops/smoke-test.sh)
 make prod-logs / prod-down
 ```
 
@@ -106,6 +107,12 @@ When adding an agent: write the class with `run()`, instantiate it in `Orchestra
 - **One API process.** No gunicorn, no worker count: analyses run in the `worker` service, and the in-process cache, the alert sweep and the start-up migration each need to exist once.
 - **Both Dockerfiles have a `dev` and a `prod` stage**; `prod` is last, so a plain `docker build` gives the deployable image, and `docker-compose.yml` asks for `dev`. Both production images run as an unprivileged user.
 - `next/image` needs `sharp` **and** `NEXT_SHARP_PATH` in the standalone image, or it silently serves originals. Next 13.5 works with sharp 0.32; 0.33 moved its binaries to packages the standalone trace does not copy.
+
+### Deploying
+
+`docs/deployment.md` is the guide. In short: a push to `main` runs `.github/workflows/ci.yml` (tests, then `images`, then `deploy`). `images` builds both images and runs `ops/smoke-test.sh`, which starts the real `docker-compose.prod.yml` behind Caddy and checks health, routing, a register-and-sign-in round trip, image resizing and non-root users; nothing is pushed to GHCR unless it passes. `deploy` (skipped until the `DEPLOY_URL` variable exists) uses the composite action in `.github/actions/deploy`, shared with the manual deploy/rollback workflow `deploy.yml`, and waits for `/healthz` to report `ok` **with the version just deployed**: "ok" from the previous version is not success.
+
+A change to the compose file, the Caddyfile or either Dockerfile is tested by running `make prod-build && make smoke`, not by reading it.
 
 ### API layer
 

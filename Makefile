@@ -3,7 +3,7 @@
        health test test-backend test-ci gen-types \
        clean clean-volumes reset \
        migrate migrate-create migrate-history migrate-check \
-       prod-build prod-up prod-down prod-logs \
+       prod-build prod-up prod-down prod-logs smoke \
        secret-key db-tables db-users db-jobs
 
 # ══════════════════════════════════════════════════════════════
@@ -61,6 +61,9 @@ prod-build: ## Build the two production images, tagged :local
 
 prod-up: prod-build ## Run the production stack locally (PROD_PORT, default 8080)
 	$(PROD_COMPOSE) up -d
+
+smoke: ## Run CI's smoke test against the images from prod-build
+	ops/smoke-test.sh local local
 
 prod-down: ## Stop the local production stack
 	$(PROD_COMPOSE) down
