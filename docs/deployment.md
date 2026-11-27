@@ -55,6 +55,7 @@ It runs the images CI already built for that commit, with that commit's compose 
 | `DEPLOY_URL` (the site's origin; the health check uses it) | GitHub Actions variable |
 | App secrets, `SITE_ADDRESS`, the database password | `/opt/fundamental-agents/.env.prod` on the server |
 | Database | `fundamental-agents_pgdata` Docker volume on the server |
+| Database dumps | `/opt/fundamental-agents/backups/` on the server, and the bucket once configured |
 | TLS certificates | `fundamental-agents_caddy_data` Docker volume on the server |
 
 ## Setting up a new server
@@ -114,7 +115,7 @@ Read from `.env.prod`. The app refuses to start without the first five.
 | `SITE_ADDRESS` | Yes | -- | The hostname Caddy serves. No scheme |
 | `FRONTEND_URL` | Yes in practice | `http://localhost:3000` | The site's origin. Links in emails and Stripe return URLs are built from it; left at the default, they point at localhost |
 | `STRIPE_PREMIUM_PRICE_ID` | For payments | -- | The Stripe Price of the premium plan. Without it checkout answers 503 |
-| `PREMIUM_EMAILS` | Set it | a personal address | Comma-separated addresses that always get premium. Set it explicitly, even to empty |
+| `PREMIUM_EMAILS` | Optional | empty | Comma-separated addresses that always get premium, once the address is verified. With SMTP unset the verification link is in the API's log |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAILS_FROM_ADDRESS` | Optional | -- | Outgoing email. Unset, verification and reset links are written to the log instead of sent |
 | `ANTHROPIC_API_KEY` | Optional | -- | Turns on the written summary at the top of each report |
 | `SENTRY_DSN` | Optional | -- | Error tracking. Unset means off |
@@ -151,6 +152,42 @@ curl -s https://<domain>/healthz
 
 With no worker, every analysis stays `pending`. `$C up -d worker` starts it; jobs that were claimed by a worker that died are picked up again once their lease expires (five minutes).
 
+## Backups
+
+The `backup` service (`ops/backup.sh`) runs `pg_dump` every night at 03:00 UTC into `/opt/fundamental-agents/backups/` on the server, keeps the newest 14, and takes one at start-up if there is none from today. Each dump is written under a temporary name and checked with `pg_restore --list` before it is kept, so an interrupted dump never looks like a finished one.
+
+The database holds accounts, subscription state and the `AnalysisSnapshot` history: what the model recommended and the price at that moment. Those rows cannot be rebuilt afterwards.
+
+**These dumps are on the same server as the database.** They cover a bad migration or a mistaken delete, not the loss of the server. For an off-box copy, create a bucket on S3-compatible storage and add to `.env.prod`:
+
+```bash
+BACKUP_S3_BUCKET=fundamental-agents-backups
+BACKUP_S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+BACKUP_S3_ACCESS_KEY_ID=...
+BACKUP_S3_SECRET_ACCESS_KEY=...
+# BACKUP_S3_PROVIDER=Cloudflare   # or AWS, Backblaze, Other
+```
+
+then `$C up -d backup`. Every later dump is uploaded too, and copies older than 60 days are removed.
+
+```bash
+$C exec backup sh /backup.sh once      # take a dump now
+$C exec backup sh /backup.sh verify    # restore the newest dump into a scratch database and compare
+$C logs backup                         # what ran, and any UPLOAD FAILED / BACKUP FAILED
+```
+
+The first dump after a brand-new deploy can be of an empty database, taken before the API had created the tables. Run `once` after the first deploy, or wait for 03:00.
+
+**To restore for real** (this replaces the live data; stop everything that writes first):
+
+```bash
+$C stop api worker
+$C exec backup sh -c 'dropdb app && createdb app && pg_restore --no-owner -d app /backups/<file>.dump'
+$C start api worker
+```
+
+CI takes a dump and restores it on every run, as part of the smoke test.
+
 ## Running the production stack locally
 
 ```bash
@@ -163,6 +200,16 @@ make prod-down
 
 `SITE_ADDRESS=:80` makes Caddy serve plain HTTP and ask for no certificate.
 
+## Uptime check
+
+`.github/workflows/uptime.yml` asks `<DEPLOY_URL>/healthz` for a healthy answer every five minutes, from GitHub's network. Three failed attempts over about a minute open an issue labelled `outage`, assigned to the repository owner, so GitHub sends an email. While the site stays down it adds one comment an hour; the first healthy check records the recovery time and closes the issue. It does nothing until `DEPLOY_URL` is set.
+
+It is a floor, not a full monitor: GitHub often runs scheduled workflows several minutes late, and stops scheduling them after 60 days without a commit. To test the alert:
+
+```bash
+gh workflow run uptime.yml -f url=https://example.invalid/healthz
+```
+
 ## Not set up yet
 
-Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): database backups, an uptime check, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
+Tracked in the [roadmap](https://github.com/mbottoni/fundamental-agents/issues/54): off-box backup storage, start-up guards for production settings, and a switch to close registration. Until those are done, run with registration watched and Stripe test keys.
