@@ -4,10 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import api from '@/lib/api';
-import { loadStripe } from '@stripe/stripe-js';
-
-const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+import { getErrorMessage } from '@/lib/errors';
 
 /* ── Plan definitions ──────────────────────────────────────── */
 const PLANS = [
@@ -63,22 +60,16 @@ export default function PricingPage() {
       setError('Please log in to subscribe.');
       return;
     }
-    if (!stripePromise) {
-      setError('Payment processing is not configured.');
-      return;
-    }
     setIsLoading(true);
     setError('');
     try {
+      // The backend returns Stripe's hosted checkout page. Navigating to it
+      // needs no Stripe key in this bundle, which would have to be baked in
+      // at build time.
       const { data } = await api.post('/stripe/create-checkout-session');
-      const stripe = await stripePromise;
-      if (stripe) {
-        const { error: stripeError } = await stripe.redirectToCheckout({ sessionId: data.sessionId });
-        if (stripeError) setError(stripeError.message || 'An error occurred with payment.');
-      }
-    } catch {
-      setError('Could not initiate checkout. Please try again.');
-    } finally {
+      window.location.assign(data.url);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not initiate checkout. Please try again.'));
       setIsLoading(false);
     }
   };

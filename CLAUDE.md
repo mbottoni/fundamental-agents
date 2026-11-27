@@ -41,7 +41,13 @@ make db-tables / db-users / db-jobs           # quick psql inspections
 make shell-db                                 # psql -U user -d stock-analyzer
 ```
 
-Production stack (Caddy + gunicorn, needs `.env.prod`): `make prod-up` / `prod-down` / `prod-logs`.
+Production stack, run locally from images built here (needs a `.env.prod`, see `.env.prod.example`):
+
+```bash
+make prod-up        # build both images, start api + worker + web + db + caddy on :8080
+make prod-up PROD_PORT=18080
+make prod-logs / prod-down
+```
 
 ## Architecture
 
@@ -90,6 +96,16 @@ When adding an agent: write the class with `run()`, instantiate it in `Orchestra
 **Background work:** a periodic asyncio task in `lifespan` sweeps every watchlist for alerts (`ALERT_SWEEP_MINUTES`, 0 disables). It runs the blocking evaluation in a worker thread and survives its own failures.
 
 **Verifying against the live API:** unit tests stub all HTTP, so FMP field names and endpoint paths are only checked by running the pipeline for real. `Orchestrator(...).data_agent.run(ticker)` plus the agents, with no DB, is enough to catch a renamed field — that is how the `dividends` endpoint 404 and the zero-interest-coverage issue were found.
+
+### Production stack
+
+`docker-compose.prod.yml` runs five services from two images: `api` and `worker` (the backend image; the worker is `python -m app.worker`), `web` (Next.js standalone), `db`, and `caddy`. It has no `build:` sections: the server holds the compose file, the `Caddyfile` and `.env.prod`, and pulls `ghcr.io/mbottoni/fundamental-agents-{api,web}:${IMAGE_TAG}`.
+
+- **One hostname.** Caddy sends `/api/*` and `/healthz` to the API and everything else to the frontend, so the browser never makes a cross-origin request and the backend's `/docs` and `/openapi.json` are not reachable from outside. `SITE_ADDRESS` in `.env.prod` is the only place the domain appears.
+- **Nothing the frontend needs may be a `NEXT_PUBLIC_*` runtime variable.** Next.js writes those into the bundle at build time; setting them on the container does nothing. The API base is the relative path `/api/v1` (a build argument in `frontend/Dockerfile`), and checkout navigates to the URL the backend returns rather than loading Stripe with a publishable key. Both were bugs of exactly this kind.
+- **One API process.** No gunicorn, no worker count: analyses run in the `worker` service, and the in-process cache, the alert sweep and the start-up migration each need to exist once.
+- **Both Dockerfiles have a `dev` and a `prod` stage**; `prod` is last, so a plain `docker build` gives the deployable image, and `docker-compose.yml` asks for `dev`. Both production images run as an unprivileged user.
+- `next/image` needs `sharp` **and** `NEXT_SHARP_PATH` in the standalone image, or it silently serves originals. Next 13.5 works with sharp 0.32; 0.33 moved its binaries to packages the standalone trace does not copy.
 
 ### API layer
 

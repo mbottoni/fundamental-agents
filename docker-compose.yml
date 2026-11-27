@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
     ports:
       - "8000:8000"
     volumes:
@@ -17,14 +16,12 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
-    # Production override:
-    # command: gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:8000
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    command: npm run dev
+      target: dev
     ports:
       - "3000:3000"
     volumes:
@@ -37,9 +34,10 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:13
+    # Same major version as production (docker-compose.prod.yml).
+    image: postgres:17-alpine
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      - postgres17_data:/var/lib/postgresql/data/
     environment:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
@@ -53,5 +51,8 @@ services:
       retries: 5
     restart: unless-stopped
 
+# A new volume name, because Postgres 17 cannot open the data directory the
+# old `postgres_data` volume holds (written by Postgres 13). That volume is
+# left untouched; remove it with `docker volume rm` once nothing in it matters.
 volumes:
-  postgres_data:
+  postgres17_data:

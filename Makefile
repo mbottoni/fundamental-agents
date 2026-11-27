@@ -3,7 +3,7 @@
        health test test-backend test-ci gen-types \
        clean clean-volumes reset \
        migrate migrate-create migrate-history migrate-check \
-       prod-up prod-down \
+       prod-build prod-up prod-down prod-logs \
        secret-key db-tables db-users db-jobs
 
 # ══════════════════════════════════════════════════════════════
@@ -46,14 +46,27 @@ restart-frontend: ## Restart only the frontend
 # Production
 # ══════════════════════════════════════════════════════════════
 
-prod-up: ## Start production stack (Caddy + gunicorn)
-	docker compose -f docker-compose.prod.yml up --build -d
+# The production stack on this machine, from images built here, at
+# http://localhost:$(PROD_PORT). Needs a .env.prod (copy .env.prod.example)
+# with SITE_ADDRESS=:80, so Caddy serves plain HTTP and asks for no
+# certificate, and FRONTEND_URL=http://localhost:$(PROD_PORT).
+PROD_PORT ?= 8080
+PROD_COMPOSE = IMAGE_TAG=local HTTP_PORT=$(PROD_PORT) HTTPS_PORT=8443 \
+	docker compose -f docker-compose.prod.yml --env-file .env.prod
 
-prod-down: ## Stop production stack
-	docker compose -f docker-compose.prod.yml down
+prod-build: ## Build the two production images, tagged :local
+	docker build -t ghcr.io/mbottoni/fundamental-agents-api:local \
+		--build-arg APP_VERSION=local backend
+	docker build -t ghcr.io/mbottoni/fundamental-agents-web:local frontend
 
-prod-logs: ## Tail production logs
-	docker compose -f docker-compose.prod.yml logs -f
+prod-up: prod-build ## Run the production stack locally (PROD_PORT, default 8080)
+	$(PROD_COMPOSE) up -d
+
+prod-down: ## Stop the local production stack
+	$(PROD_COMPOSE) down
+
+prod-logs: ## Tail the local production stack's logs
+	$(PROD_COMPOSE) logs -f
 
 # ══════════════════════════════════════════════════════════════
 # Logs

@@ -1,114 +1,130 @@
-version: '3.8'
-
-# ── Production Docker Compose ────────────────────────────────
-# Usage:
-#   docker compose -f docker-compose.prod.yml up -d
+# Single-server production stack: API, analysis worker, web frontend, Postgres
+# and Caddy (automatic HTTPS). Secrets and SITE_ADDRESS live in .env.prod on
+# the server, never in git; see .env.prod.example.
 #
-# Requires a .env.prod file with all production secrets.
+# The server holds only this file, the Caddyfile and .env.prod. The images come
+# from GHCR, built and tested by CI. By hand, on the server:
+#   IMAGE_TAG=<commit sha> docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+name: fundamental-agents
+
+# json-file logs grow without limit by default; on a small disk that is an
+# outage waiting for a busy week.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# The API and the worker are the same image with the same configuration.
+x-backend: &backend
+  image: ghcr.io/mbottoni/fundamental-agents-api:${IMAGE_TAG:-latest}
+  env_file: .env.prod
+  restart: unless-stopped
+  logging: *default-logging
 
 services:
+  api:
+    <<: *backend
+    # --forwarded-allow-ips=*: without it uvicorn ignores Caddy's
+    # X-Forwarded-For, every request appears to come from the proxy, and the
+    # per-client rate limit becomes one global bucket. The wildcard is safe
+    # only because this service publishes no ports: nothing but the caddy
+    # container can reach it. Do not keep it if this port is ever exposed.
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --proxy-headers --forwarded-allow-ips=*
+    environment:
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set in .env.prod}@db:5432/app
+      # Analyses run in the worker below, so restarting the API for a deploy
+      # does not interrupt one.
+      ANALYSIS_WORKER_INLINE: "false"
+    expose:
+      - "8000"
+    # "ok" means the database answers, the schema is current and a worker is
+    # alive, not merely that the port is open. python, because the slim image
+    # has no curl.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, sys, urllib.request;
+          body = json.load(urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=4));
+          sys.exit(0 if body.get("status") == "ok" else 1)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Runs the analysis pipeline off the job queue. It waits for the API to
+  # migrate the database before it starts claiming jobs. Several can run
+  # (`--scale worker=N`): rows are claimed with FOR UPDATE SKIP LOCKED. Mind
+  # the provider quota: every concurrent analysis is about eleven requests.
+  worker:
+    <<: *backend
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: postgresql://app:${POSTGRES_PASSWORD:?set in .env.prod}@db:5432/app
+      # The alert sweep belongs to the API process; a worker running it too
+      # would raise every alert twice.
+      ALERT_SWEEP_MINUTES: "0"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: ghcr.io/mbottoni/fundamental-agents-web:${IMAGE_TAG:-latest}
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    logging: *default-logging
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env.prod}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  # The only service with published ports. Docker publishes ports past the
+  # host firewall, so nothing else here may have a `ports:` entry.
   caddy:
     image: caddy:2-alpine
-    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set in .env.prod}
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - backend
-      - frontend
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    # --forwarded-allow-ips: without it uvicorn ignores Caddy's X-Forwarded-For
-    # and every request appears to come from the proxy, so the per-client rate
-    # limit collapses into one global bucket. "*" is safe here specifically
-    # because this service publishes no ports — it is reachable only from the
-    # caddy container on the internal network, so the header cannot be spoofed
-    # from outside. Do not keep the wildcard if you ever expose this port.
-    command: gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app -b 0.0.0.0:8000 --timeout 120 --access-logfile - --forwarded-allow-ips="*"
-    env_file:
-      - .env.prod
-    environment:
-      - DATABASE_URL=postgresql://user:${DB_PASSWORD}@db:5432/stock-analyzer
-      # Analyses run in the worker service below, so restarting the API for a
-      # deploy does not interrupt one.
-      - ANALYSIS_WORKER_INLINE=false
-    depends_on:
-      db:
-        condition: service_healthy
+      - api
+      - web
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1.0"
-
-  # Runs the analysis pipeline off the job queue. Scale it with
-  # `docker compose up -d --scale worker=N`: workers claim rows with
-  # FOR UPDATE SKIP LOCKED, so several can poll the same table safely. Mind the
-  # provider quota — every concurrent analysis is ~11 more requests against it.
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: python -m app.worker
-    env_file:
-      - .env.prod
-    environment:
-      - DATABASE_URL=postgresql://user:${DB_PASSWORD}@db:5432/stock-analyzer
-      # The alert sweep belongs to the API process; a worker running it too
-      # would duplicate the work.
-      - ALERT_SWEEP_MINUTES=0
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "1.0"
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    environment:
-      - NEXT_PUBLIC_API_URL=${API_URL:-https://api.yourdomain.com}/api/v1
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-
-  db:
-    image: postgres:15-alpine
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
-    environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=stock-analyzer
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d stock-analyzer"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
+    logging: *default-logging
 
 volumes:
-  postgres_data:
+  pgdata:
   caddy_data:
   caddy_config:

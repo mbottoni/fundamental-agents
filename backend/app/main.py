@@ -211,11 +211,12 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS
-allowed_origins = [
-    settings.FRONTEND_URL,
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# In production the site and the API share one origin (see the Caddyfile), so
+# no cross-origin request is expected at all. The local development origins
+# are allowed only when the app is itself configured for local development.
+allowed_origins = [settings.FRONTEND_URL]
+if "localhost" in settings.FRONTEND_URL or "127.0.0.1" in settings.FRONTEND_URL:
+    allowed_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
