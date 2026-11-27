@@ -91,6 +91,9 @@ def cancel_subscription(
         )
 
 
+# Exempt from rate limiting (see rate_limit.EXEMPT_PATHS): deliveries carry no
+# user token and share a handful of addresses, so they would pile into one
+# bucket. Authenticity comes from the signature check below, not call volume.
 @router.post("/webhook")
 async def stripe_webhook(
     request: Request,

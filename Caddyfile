@@ -16,7 +16,12 @@ yourdomain.com {
 }
 
 api.yourdomain.com {
-    # Backend API
+    # Backend API.
+    #
+    # Caddy sets X-Forwarded-For/Proto/Host on reverse_proxy by default. The
+    # backend only honours them when started with --forwarded-allow-ips (see
+    # docker-compose.prod.yml); without that flag it sees this container's
+    # address as the client for every request and rate limiting breaks.
     reverse_proxy backend:8000
 
     header {

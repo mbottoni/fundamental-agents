@@ -34,7 +34,11 @@ class Settings(BaseSettings):
     PREMIUM_EMAILS: str = "maruanbakriottoni@gmail.com"
 
     # --- Rate Limiting ---
+    # Requests per minute per caller. Authenticated callers are counted per
+    # user; anonymous ones per client address.
     RATE_LIMIT_PER_MINUTE: int = 30
+    # Off only where a test needs to make many calls in quick succession.
+    RATE_LIMIT_ENABLED: bool = True
     FREE_TIER_DAILY_ANALYSES: int = 3
     # A repeat analysis of the same ticker within this window returns the
     # existing report instead of re-running the pipeline.
