@@ -38,6 +38,7 @@ services:
       # Analyses run in the worker below, so restarting the API for a deploy
       # does not interrupt one.
       ANALYSIS_WORKER_INLINE: "false"
+      ENVIRONMENT: production
     expose:
       - "8000"
     # "ok" means the database answers, the schema is current and a worker is
@@ -72,6 +73,7 @@ services:
       # The alert sweep belongs to the API process; a worker running it too
       # would raise every alert twice.
       ALERT_SWEEP_MINUTES: "0"
+      ENVIRONMENT: production
     depends_on:
       db:
         condition: service_healthy
