@@ -22,6 +22,16 @@ def _smtp_configured() -> bool:
 def _send_email(to: str, subject: str, html_body: str) -> None:
     """Send an email via SMTP or log it in dev mode."""
     if not _smtp_configured():
+        if settings.is_production:
+            # The body carries a reset or verification token. In development
+            # printing it is how a link gets clicked; in production it would
+            # put working account-takeover links in the log.
+            logger.warning(
+                "Email not sent (SMTP is not configured): subject='%s'. "
+                "To verify an account by hand: python -m app.manage verify <email>",
+                subject,
+            )
+            return
         logger.info(
             "📧 [DEV MODE] Email to=%s subject='%s'\n%s",
             to, subject, html_body,

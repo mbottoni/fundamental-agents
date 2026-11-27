@@ -114,9 +114,10 @@ Read from `.env.prod`. The app refuses to start without the first five.
 | `POSTGRES_PASSWORD` | Yes | -- | Used by the `db` service and to build `DATABASE_URL` for the API and worker |
 | `SITE_ADDRESS` | Yes | -- | The hostname Caddy serves. No scheme |
 | `FRONTEND_URL` | Yes in practice | `http://localhost:3000` | The site's origin. Links in emails and Stripe return URLs are built from it; left at the default, they point at localhost |
+| `STRIPE_LIVE` | No | `false` | Set to `true` only with live keys. The app refuses to start if this and the key disagree, so test keys are a decision and a live key cannot slip in |
 | `STRIPE_PREMIUM_PRICE_ID` | For payments | -- | The Stripe Price of the premium plan. Without it checkout answers 503 |
-| `PREMIUM_EMAILS` | Optional | empty | Comma-separated addresses that always get premium, once the address is verified. With SMTP unset the verification link is in the API's log |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAILS_FROM_ADDRESS` | Optional | -- | Outgoing email. Unset, verification and reset links are written to the log instead of sent |
+| `PREMIUM_EMAILS` | Optional | empty | Comma-separated addresses that always get premium, once the address is verified. Without email configured, verify it by hand (see *What production refuses*) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAILS_FROM_ADDRESS` | Optional | -- | Outgoing email. Unset, nothing is sent: no verification, no password reset. See *What production refuses* for verifying by hand |
 | `ANTHROPIC_API_KEY` | Optional | -- | Turns on the written summary at the top of each report |
 | `SENTRY_DSN` | Optional | -- | Error tracking. Unset means off |
 | `FREE_TIER_DAILY_ANALYSES` | No | `3` | Daily analyses for a free account |
@@ -127,7 +128,23 @@ Read from `.env.prod`. The app refuses to start without the first five.
 | `LOG_LEVEL` | No | `INFO` | |
 | `REDIS_URL` | No | -- | Not needed with one API process |
 
-Set by the compose file, not by hand: `DATABASE_URL`, `ANALYSIS_WORKER_INLINE=false`, and `IMAGE_TAG`, which each deploy appends to `.env.prod` so a reboot brings back the deployed version.
+Set by the compose file, not by hand: `ENVIRONMENT=production`, `DATABASE_URL`, `ANALYSIS_WORKER_INLINE=false`, and `IMAGE_TAG`, which each deploy appends to `.env.prod` so a reboot brings back the deployed version.
+
+### What production refuses
+
+With `ENVIRONMENT=production` the API and the worker stop at start-up, naming every problem at once, if:
+
+- `FRONTEND_URL` is not an `https://` origin;
+- `SECRET_KEY` is a placeholder from an example file;
+- `DATABASE_URL` points at SQLite;
+- `STRIPE_SECRET_KEY` is a live key without `STRIPE_LIVE=true`, or the reverse.
+
+Production also serves no `/docs`, `/redoc` or `/openapi.json`, allows no localhost CORS origin, and never writes an unsent email to the log: those emails carry working reset and verification links. Without email configured, verify an account by hand:
+
+```bash
+$C exec api python -m app.manage verify you@example.com
+$C exec api python -m app.manage users
+```
 
 ## Operating it
 

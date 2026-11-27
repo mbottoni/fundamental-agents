@@ -66,8 +66,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        # HSTS only in production (when not localhost)
-        if "localhost" not in settings.FRONTEND_URL:
+        if settings.is_production:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
@@ -201,6 +200,12 @@ app = FastAPI(
     description="Multi-agent AI platform for fundamental stock analysis.",
     version="2.0.0",
     lifespan=lifespan,
+    # The interactive docs describe every endpoint to anyone who asks. Caddy
+    # already keeps them off the public hostname; this keeps them off in
+    # production however the app is reached.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 # Rate limiting. See app/core/rate_limit.py — the previous slowapi wiring
@@ -213,9 +218,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 # CORS
 # In production the site and the API share one origin (see the Caddyfile), so
 # no cross-origin request is expected at all. The local development origins
-# are allowed only when the app is itself configured for local development.
+# are allowed in development only.
 allowed_origins = [settings.FRONTEND_URL]
-if "localhost" in settings.FRONTEND_URL or "127.0.0.1" in settings.FRONTEND_URL:
+if not settings.is_production:
     allowed_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
 app.add_middleware(
     CORSMiddleware,

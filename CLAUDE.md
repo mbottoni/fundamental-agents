@@ -160,6 +160,8 @@ Revisions 0001–0004 are idempotent (they skip what already exists) because the
 
 `app/core/config.py` is a `pydantic-settings` model with **no defaults** for `SECRET_KEY` (≥32 chars), `DATABASE_URL`, the two API keys, and the two Stripe keys — a missing one raises at import time, before FastAPI starts. The root `.env` is what `docker-compose` feeds to the backend container; `backend/.env` is for running outside Docker.
 
+**Production is explicit.** `ENVIRONMENT=production` (set by `docker-compose.prod.yml`) makes `Settings` refuse to start on a value left at its development default — a non-https `FRONTEND_URL`, a placeholder `SECRET_KEY`, SQLite, or a Stripe key that disagrees with `STRIPE_LIVE` — and reports every problem at once. It also turns off the interactive docs, the localhost CORS origins, and the printing of unsent emails to the log (their bodies carry working reset and verification links). Add to `production_settings_must_be_real` when a new setting has a default that would be wrong on a live site. Without email configured, an operator verifies an account with `python -m app.manage verify <email>`.
+
 `tests/conftest.py` therefore sets those env vars via `os.environ.setdefault` **before** importing the app, then swaps in an in-memory SQLite engine through `app.dependency_overrides[get_db]`. Keep those two blocks ahead of any app import when editing test setup.
 
 ## Notes

@@ -1,8 +1,13 @@
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+
+# Fragments that mark a SECRET_KEY copied from an example or a test file. Any
+# of them is long enough to pass the length check.
+PLACEHOLDER_SECRET_MARKERS = ("changeme", "test-secret-key", "your-secret", "placeholder")
 
 
 class Settings(BaseSettings):
@@ -25,8 +30,17 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str
     STRIPE_WEBHOOK_SECRET: str
     STRIPE_PREMIUM_PRICE_ID: str = ""
+    # Whether this deployment is meant to take real money. In production the
+    # key has to agree with it, so running on test keys is a decision someone
+    # made rather than a leftover, and a live key cannot slip in unannounced.
+    STRIPE_LIVE: bool = False
 
     # --- Application ---
+    # "production" turns on the start-up checks below and turns off everything
+    # that exists for development: the interactive API docs, the localhost
+    # CORS origins, and writing unsent emails (with their tokens) to the log.
+    # The production compose file sets it.
+    ENVIRONMENT: Literal["development", "production"] = "development"
     FRONTEND_URL: str = "http://localhost:3000"
     # The commit this build was made from; the image sets it. Reported by
     # /healthz so a deploy can be seen to have taken effect.
@@ -113,7 +127,54 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL must be properly configured.")
         return v
 
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
+
+    @model_validator(mode="after")
+    def production_settings_must_be_real(self) -> "Settings":
+        """
+        Refuse to start in production on a setting left at its development
+        value. Each of these fails silently otherwise: the app runs, and the
+        mistake shows up later as a reset link to localhost or a payment that
+        was never real.
+        """
+        if not self.is_production:
+            return self
+
+        problems = []
+        if not self.FRONTEND_URL.startswith("https://"):
+            problems.append(
+                f"FRONTEND_URL is {self.FRONTEND_URL!r}. It must be the site's https:// "
+                "origin: links in emails and Stripe return URLs are built from it."
+            )
+        if any(marker in self.SECRET_KEY.lower() for marker in PLACEHOLDER_SECRET_MARKERS):
+            problems.append(
+                "SECRET_KEY is a placeholder from an example file. Generate one with: "
+                'python3 -c "import secrets; print(secrets.token_urlsafe(64))"'
+            )
+        if self.DATABASE_URL.startswith("sqlite"):
+            problems.append("DATABASE_URL points at SQLite. Production runs on PostgreSQL.")
+        live_key = self.STRIPE_SECRET_KEY.startswith(("sk_live_", "rk_live_"))
+        if live_key and not self.STRIPE_LIVE:
+            problems.append(
+                "STRIPE_SECRET_KEY is a live key but STRIPE_LIVE is not set. Set "
+                "STRIPE_LIVE=true once the go-live checklist is done, or use a test key."
+            )
+        if self.STRIPE_LIVE and not live_key:
+            problems.append(
+                "STRIPE_LIVE is set but STRIPE_SECRET_KEY is not a live key."
+            )
+        if problems:
+            raise ValueError(
+                "Refusing to start with ENVIRONMENT=production:\n- " + "\n- ".join(problems)
+            )
+        return self
+
     model_config = {
+        # A validation error otherwise prints the start of what it was given,
+        # which here is the secrets themselves, straight into the log.
+        "hide_input_in_errors": True,
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
